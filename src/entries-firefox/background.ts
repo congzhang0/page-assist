@@ -201,29 +201,28 @@ export default defineBackground({
           })
         }, isCopilotRunning ? 0 : 5000)
       } else if (info.menuItemId === "save-page-pa") {
-        try {
-          // 保存当前页面
-          const savedPage = await saveCurrentPage();
+        // 使用 Promise 链而不是 await
+        saveCurrentPage()
+          .then(savedPage => {
+            // 显示通知
+            browser.notifications.create({
+              type: "basic",
+              iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+              title: "页面已保存",
+              message: `已成功保存页面: ${savedPage.title}`
+            });
+          })
+          .catch(error => {
+            console.error("保存页面失败:", error);
 
-          // 显示通知
-          browser.notifications.create({
-            type: "basic",
-            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
-            title: "页面已保存",
-            message: `已成功保存页面: ${savedPage.title}`
+            // 显示错误通知
+            browser.notifications.create({
+              type: "basic",
+              iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+              title: "保存页面失败",
+              message: "无法保存当前页面，请稍后重试。"
+            });
           });
-
-        } catch (error) {
-          console.error("保存页面失败:", error);
-
-          // 显示错误通知
-          browser.notifications.create({
-            type: "basic",
-            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
-            title: "保存页面失败",
-            message: "无法保存当前页面，请稍后重试。"
-          });
-        }
       }
     })
 

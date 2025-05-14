@@ -41,8 +41,22 @@ export default defineConfig({
     ],
     build: {
       rollupOptions: {
-        external: ["langchain", "@langchain/community"]
+        external: ["langchain", "@langchain/community"],
+        // 添加对 pdfjs-dist 的特殊处理
+        onwarn(warning, warn) {
+          // 忽略 pdfjs-dist 相关的顶级 await 警告
+          if (warning.code === 'INVALID_EXPORT_OPTION' &&
+              warning.message &&
+              warning.message.includes('pdfjs-dist')) {
+            return;
+          }
+          warn(warning);
+        }
       }
+    },
+    // 优化 pdfjs-dist 的处理
+    optimizeDeps: {
+      exclude: ['pdfjs-dist']
     }
   }),
   entrypointsDir:
