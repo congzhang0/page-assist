@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, message } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined } from "@ant-design/icons";
+import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message } from "antd";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +11,7 @@ const PAGE_SIZE = 10;
 const OptionSettingsSavedPages: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  
+
   const [pages, setPages] = useState<SavedPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -24,8 +24,9 @@ const OptionSettingsSavedPages: React.FC = () => {
   const [editTitle, setEditTitle] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editNotes, setEditNotes] = useState("");
+  const [editRating, setEditRating] = useState(0);
   const [newTag, setNewTag] = useState("");
-  
+
   // 加载保存的页面
   const loadPages = async () => {
     try {
@@ -34,14 +35,14 @@ const OptionSettingsSavedPages: React.FC = () => {
         searchText: searchText || undefined,
         tags: selectedTags.length > 0 ? selectedTags : undefined
       });
-      
+
       setTotal(allPages.length);
-      
+
       // 分页处理
       const startIndex = (currentPage - 1) * PAGE_SIZE;
       const endIndex = startIndex + PAGE_SIZE;
       setPages(allPages.slice(startIndex, endIndex));
-      
+
       setLoading(false);
     } catch (error) {
       console.error("加载页面失败:", error);
@@ -49,7 +50,7 @@ const OptionSettingsSavedPages: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // 加载所有标签
   const loadTags = async () => {
     try {
@@ -59,24 +60,24 @@ const OptionSettingsSavedPages: React.FC = () => {
       console.error("加载标签失败:", error);
     }
   };
-  
+
   // 初始加载
   useEffect(() => {
     loadPages();
     loadTags();
   }, []);
-  
+
   // 搜索或标签变化时重新加载
   useEffect(() => {
     loadPages();
   }, [searchText, selectedTags, currentPage]);
-  
+
   // 处理搜索
   const handleSearch = (value: string) => {
     setSearchText(value);
     setCurrentPage(1); // 重置到第一页
   };
-  
+
   // 处理标签选择
   const handleTagSelect = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -86,7 +87,7 @@ const OptionSettingsSavedPages: React.FC = () => {
     }
     setCurrentPage(1); // 重置到第一页
   };
-  
+
   // 处理页面删除
   const handleDelete = async (id: string) => {
     Modal.confirm({
@@ -107,27 +108,29 @@ const OptionSettingsSavedPages: React.FC = () => {
       }
     });
   };
-  
+
   // 打开编辑模态框
   const handleEdit = (page: SavedPage) => {
     setCurrentEditPage(page);
     setEditTitle(page.title);
     setEditTags(page.tags);
     setEditNotes(page.notes);
+    setEditRating(page.rating || 0);
     setEditModalVisible(true);
   };
-  
+
   // 保存编辑
   const handleSaveEdit = async () => {
     if (!currentEditPage) return;
-    
+
     try {
       await updateSavedPage(currentEditPage.id, {
         title: editTitle,
         tags: editTags,
-        notes: editNotes
+        notes: editNotes,
+        rating: editRating
       });
-      
+
       message.success("页面已更新");
       setEditModalVisible(false);
       loadPages();
@@ -137,28 +140,28 @@ const OptionSettingsSavedPages: React.FC = () => {
       message.error("更新页面失败");
     }
   };
-  
+
   // 添加新标签
   const handleAddTag = () => {
     if (!newTag.trim()) return;
-    
+
     if (!editTags.includes(newTag)) {
       setEditTags([...editTags, newTag]);
     }
-    
+
     setNewTag("");
   };
-  
+
   // 移除标签
   const handleRemoveTag = (tag: string) => {
     setEditTags(editTags.filter(t => t !== tag));
   };
-  
+
   // 导出所有页面
   const handleExport = async () => {
     try {
       const data = await exportSavedPages();
-      
+
       // 创建下载链接
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -169,32 +172,32 @@ const OptionSettingsSavedPages: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       message.success("导出成功");
     } catch (error) {
       console.error("导出失败:", error);
       message.error("导出失败");
     }
   };
-  
+
   // 导入页面
   const handleImport = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json";
-    
+
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      
+
       try {
         const reader = new FileReader();
-        
+
         reader.onload = async (event) => {
           try {
             const data = JSON.parse(event.target?.result as string) as SavedPage[];
             const count = await importSavedPages(data);
-            
+
             message.success(`成功导入 ${count} 个页面`);
             loadPages();
             loadTags();
@@ -203,28 +206,28 @@ const OptionSettingsSavedPages: React.FC = () => {
             message.error("导入失败: 无效的文件格式");
           }
         };
-        
+
         reader.readAsText(file);
       } catch (error) {
         console.error("导入失败:", error);
         message.error("导入失败");
       }
     };
-    
+
     input.click();
   };
-  
+
   // 查看页面
   const handleView = (page: SavedPage) => {
     // 在新标签页中打开页面
     window.open(page.url, "_blank");
   };
-  
+
   return (
     <div className="p-4">
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-xl font-bold">已保存的页面</h1>
-        
+
         <Space>
           <Button icon={<ExportOutlined />} onClick={handleExport}>
             导出
@@ -234,7 +237,7 @@ const OptionSettingsSavedPages: React.FC = () => {
           </Button>
         </Space>
       </div>
-      
+
       <div className="mb-4">
         <Input.Search
           placeholder="搜索标题或内容"
@@ -243,7 +246,7 @@ const OptionSettingsSavedPages: React.FC = () => {
           onSearch={handleSearch}
           className="mb-2"
         />
-        
+
         <div className="mt-2">
           <span className="mr-2">标签筛选:</span>
           {allTags.map(tag => (
@@ -258,7 +261,7 @@ const OptionSettingsSavedPages: React.FC = () => {
           ))}
         </div>
       </div>
-      
+
       <List
         loading={loading}
         dataSource={pages}
@@ -278,10 +281,25 @@ const OptionSettingsSavedPages: React.FC = () => {
             ]}
           >
             <List.Item.Meta
-              title={<a href={page.url} target="_blank" rel="noopener noreferrer">{page.title}</a>}
+              title={
+                <div className="flex items-center">
+                  <a href={page.url} target="_blank" rel="noopener noreferrer">{page.title}</a>
+                  {page.rating > 0 && (
+                    <Rate
+                      disabled
+                      value={page.rating}
+                      className="ml-2"
+                      style={{ fontSize: '14px' }}
+                    />
+                  )}
+                </div>
+              }
               description={
                 <div>
                   <div className="text-gray-500 mb-1 truncate">{page.url}</div>
+                  {page.summary && (
+                    <div className="text-gray-700 mb-2 line-clamp-3">{page.summary}</div>
+                  )}
                   <div className="mb-1">
                     {page.tags.map(tag => (
                       <Tag key={tag} color="blue" className="mr-1">{tag}</Tag>
@@ -299,7 +317,7 @@ const OptionSettingsSavedPages: React.FC = () => {
         )}
         pagination={false}
       />
-      
+
       <div className="mt-4 flex justify-center">
         <Pagination
           current={currentPage}
@@ -309,7 +327,7 @@ const OptionSettingsSavedPages: React.FC = () => {
           showSizeChanger={false}
         />
       </div>
-      
+
       {/* 编辑模态框 */}
       <Modal
         title="编辑页面信息"
@@ -323,7 +341,12 @@ const OptionSettingsSavedPages: React.FC = () => {
           <label className="block mb-1">标题</label>
           <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} />
         </div>
-        
+
+        <div className="mb-4">
+          <label className="block mb-1">评分</label>
+          <Rate value={editRating} onChange={setEditRating} />
+        </div>
+
         <div className="mb-4">
           <label className="block mb-1">标签</label>
           <div className="mb-2">
@@ -349,7 +372,7 @@ const OptionSettingsSavedPages: React.FC = () => {
             <Button icon={<TagOutlined />} onClick={handleAddTag} />
           </Input.Group>
         </div>
-        
+
         <div className="mb-4">
           <label className="block mb-1">备注</label>
           <Input.TextArea

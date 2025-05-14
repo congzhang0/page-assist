@@ -21,6 +21,8 @@ export interface SavedPage {
   type: string;
   tags: string[];
   notes: string;
+  summary?: string;       // 页面内容摘要
+  rating?: number;        // 内容质量评分（1-5星）
   createdAt: number;
   updatedAt: number;
   favicon?: string;
@@ -36,6 +38,8 @@ export interface SavePageParams {
   type: string;
   tags?: string[];
   notes?: string;
+  summary?: string;       // 页面内容摘要
+  rating?: number;        // 内容质量评分（1-5星）
   favicon?: string;
   screenshot?: string;
 }
@@ -148,6 +152,8 @@ export class SavedPagesDB {
           type: params.type,
           tags: params.tags || [],
           notes: params.notes || '',
+          summary: params.summary,
+          rating: params.rating,
           createdAt: now,
           updatedAt: now,
           favicon: params.favicon,

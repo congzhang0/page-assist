@@ -6,6 +6,7 @@
 import { getDataFromCurrentTab } from "@/libs/get-html";
 import { getScreenshotFromCurrentTab } from "@/libs/get-screenshot";
 import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/saved-pages";
+import { generateSummary } from "@/services/llm-service";
 
 /**
  * 保存当前页面到数据库
@@ -51,6 +52,29 @@ export const saveCurrentPage = async (params?: {
       logger.info('成功获取页面截图', { screenshotLength: screenshot?.length });
     }
 
+    // 使用LLM生成摘要、关键词和评分
+    logger.debug('正在使用LLM生成摘要和关键词');
+    let summary = '';
+    let autoTags: string[] = [];
+    let rating = 0;
+
+    try {
+      const summaryResult = await generateSummary(content, title, url);
+      summary = summaryResult.summary;
+      autoTags = summaryResult.keywords;
+      rating = summaryResult.rating;
+      logger.info('成功生成摘要和关键词', {
+        summaryLength: summary.length,
+        tagsCount: autoTags.length,
+        rating
+      });
+    } catch (error) {
+      logger.warn('生成摘要和关键词失败，将继续保存页面', error);
+    }
+
+    // 合并用户提供的标签和自动生成的标签
+    const mergedTags = [...new Set([...(params?.tags || []), ...autoTags])];
+
     // 准备保存参数
     const saveParams: SavePageParams = {
       title,
@@ -58,8 +82,10 @@ export const saveCurrentPage = async (params?: {
       content,
       html: type === 'html' ? content : '', // 如果是HTML类型，保存原始HTML
       type,
-      tags: params?.tags || [],
+      tags: mergedTags,
       notes: params?.notes || '',
+      summary,
+      rating,
       favicon,
       screenshot: success ? screenshot : undefined
     };
@@ -134,6 +160,8 @@ export const updateSavedPage = async (
     title?: string;
     tags?: string[];
     notes?: string;
+    summary?: string;
+    rating?: number;
   }
 ): Promise<SavedPage> => {
   try {
@@ -208,6 +236,8 @@ export const importSavedPages = async (pages: SavedPage[]): Promise<number> => {
         type: page.type,
         tags: page.tags,
         notes: page.notes,
+        summary: page.summary,
+        rating: page.rating,
         favicon: page.favicon,
         screenshot: page.screenshot
       });

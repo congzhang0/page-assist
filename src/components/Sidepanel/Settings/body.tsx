@@ -13,6 +13,7 @@ import {
   saveForRag,
   getEmbeddingModels
 } from "~/services/ollama"
+import { SidepanelSavedPages } from "@/components/Sidepanel/SavedPages"
 
 import {
   Skeleton,
@@ -419,6 +420,12 @@ export const SettingsBody = () => {
       </div>
       <div className="border border-gray-300 dark:border-gray-700 rounded p-4 bg-white dark:bg-[#171717]">
         <TTSModeSettings hideBorder />
+      </div>
+      <div className="border border-gray-300 dark:border-gray-700 rounded p-4 bg-white dark:bg-[#171717]">
+        <h2 className="text-md mb-4 font-semibold dark:text-white">
+          已保存的页面
+        </h2>
+        <SidepanelSavedPages />
       </div>
       <div className="border border-gray-300 dark:border-gray-700 rounded p-4 bg-white dark:bg-[#171717]">
         <h2 className="text-md mb-4 font-semibold dark:text-white">
