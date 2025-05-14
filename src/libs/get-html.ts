@@ -11,14 +11,21 @@ import { cleanUnwantedUnicode } from "@/utils/clean"
 
 const _getHtml = () => {
   const url = window.location.href
+  const title = document.title
+  const favicon = document.querySelector('link[rel="icon"]')?.getAttribute('href') ||
+                 document.querySelector('link[rel="shortcut icon"]')?.getAttribute('href') ||
+                 `${window.location.origin}/favicon.ico`
+
   if (document.contentType === "application/pdf") {
-    return { url, content: "", type: "pdf" }
+    return { url, title, content: "", type: "pdf", favicon }
   }
 
   return {
     content: document.documentElement.outerHTML,
     url,
-    type: "html"
+    title,
+    type: "html",
+    favicon
   }
 }
 
@@ -55,14 +62,16 @@ export const getDataFromCurrentTab = async () => {
             console.error("error", e)
             // this is a weird method but it works
             if (import.meta.env.BROWSER === "firefox") {
-              // all I need is to get the pdf url but somehow 
+              // all I need is to get the pdf url but somehow
               // firefox won't allow extensions to run content scripts on pdf https://bugzilla.mozilla.org/show_bug.cgi?id=1454760
-              // so I set up a weird method to fix this issue by asking tab to give the url 
+              // so I set up a weird method to fix this issue by asking tab to give the url
               // and then I can get the pdf url
               const result = {
                 url: tab.url,
+                title: tab.title || "PDF Document",
                 content: "",
-                type: "pdf"
+                type: "pdf",
+                favicon: tab.favIconUrl
               }
               resolve(result)
             }
@@ -71,11 +80,13 @@ export const getDataFromCurrentTab = async () => {
     }
   }) as Promise<{
     url: string
+    title: string
     content: string
     type: string
+    favicon?: string
   }>
 
-  const { content, type, url } = await result
+  const { content, type, url, title, favicon } = await result
 
   if (type === "pdf") {
     const res = await fetch(url)
@@ -107,38 +118,46 @@ export const getDataFromCurrentTab = async () => {
 
     return {
       url,
+      title,
       content: "",
       pdf: pdfHtml,
-      type: "pdf"
+      type: "pdf",
+      favicon
     }
   }
   if (isTwitterTimeline(url)) {
     const data = parseTwitterTimeline(content)
     return {
       url,
+      title,
       content: data,
       type: "html",
-      pdf: []
+      pdf: [],
+      favicon
     }
   } else if (isTweet(url)) {
     const data = parseTweet(content)
     return {
       url,
+      title,
       content: data,
       type: "html",
-      pdf: []
+      pdf: [],
+      favicon
     }
   } else if (isGoogleDocs(url)) {
     const data = await parseGoogleDocs()
     if (data) {
       return {
         url,
+        title,
         content: cleanUnwantedUnicode(data),
         type: "html",
-        pdf: []
+        pdf: [],
+        favicon
       }
     }
   }
   const data = defaultExtractContent(content)
-  return { url, content: data, type, pdf: [] }
+  return { url, title, content: data, type, pdf: [], favicon }
 }

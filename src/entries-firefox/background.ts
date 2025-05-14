@@ -3,6 +3,7 @@ import { browser } from "wxt/browser"
 import { clearBadge, streamDownload } from "@/utils/pull-ollama"
 import { Storage } from "@plasmohq/storage"
 import { getInitialConfig } from "@/services/action"
+import { saveCurrentPage } from "@/services/saved-pages"
 
 export default defineBackground({
   main() {
@@ -50,31 +51,38 @@ export default defineBackground({
           title: browser.i18n.getMessage("contextSummarize"),
           contexts: ["selection"]
         })
-    
+
         browser.contextMenus.create({
           id: "explain-pa",
           title: browser.i18n.getMessage("contextExplain"),
           contexts: ["selection"]
         })
-    
+
         browser.contextMenus.create({
           id: "rephrase-pa",
           title: browser.i18n.getMessage("contextRephrase"),
           contexts: ["selection"]
         })
-    
+
         browser.contextMenus.create({
           id: "translate-pg",
           title: browser.i18n.getMessage("contextTranslate"),
           contexts: ["selection"]
         })
-    
+
         browser.contextMenus.create({
           id: "custom-pg",
           title: browser.i18n.getMessage("contextCustom"),
           contexts: ["selection"]
         })
-    
+
+        // 添加保存当前页面的菜单项
+        browser.contextMenus.create({
+          id: "save-page-pa",
+          title: "保存当前页面",
+          contexts: ["page"]
+        })
+
       } catch (error) {
         console.error("Error in initLogic:", error)
       }
@@ -192,6 +200,30 @@ export default defineBackground({
             text: info.selectionText
           })
         }, isCopilotRunning ? 0 : 5000)
+      } else if (info.menuItemId === "save-page-pa") {
+        try {
+          // 保存当前页面
+          const savedPage = await saveCurrentPage();
+
+          // 显示通知
+          browser.notifications.create({
+            type: "basic",
+            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+            title: "页面已保存",
+            message: `已成功保存页面: ${savedPage.title}`
+          });
+
+        } catch (error) {
+          console.error("保存页面失败:", error);
+
+          // 显示错误通知
+          browser.notifications.create({
+            type: "basic",
+            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+            title: "保存页面失败",
+            message: "无法保存当前页面，请稍后重试。"
+          });
+        }
       }
     })
 
