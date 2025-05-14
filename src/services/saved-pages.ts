@@ -12,17 +12,45 @@ import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/saved-pa
  * @param params 保存参数
  * @returns 保存的页面信息
  */
+import logger from '@/utils/logger';
+
 export const saveCurrentPage = async (params?: {
   tags?: string[];
   notes?: string;
 }): Promise<SavedPage> => {
+  logger.info('开始保存当前页面', params);
+
   try {
     // 获取当前页面内容
-    const { url, title, content, type, pdf, favicon } = await getDataFromCurrentTab();
-    
+    logger.debug('正在获取页面内容');
+    const pageDataResult = await getDataFromCurrentTab().catch(err => {
+      logger.error('获取页面内容失败', err);
+      throw new Error(`获取页面内容失败: ${err.message || '未知错误'}`);
+    });
+
+    if (!pageDataResult) {
+      logger.error('获取页面内容返回空结果');
+      throw new Error('获取页面内容返回空结果');
+    }
+
+    const { url, title, content, type, pdf, favicon } = pageDataResult;
+    logger.info('成功获取页面内容', { url, title, contentLength: content?.length, type });
+
     // 获取页面截图
-    const { success, screenshot } = await getScreenshotFromCurrentTab();
-    
+    logger.debug('正在获取页面截图');
+    const screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
+      logger.error('获取页面截图失败', err);
+      // 截图失败不阻止保存过程，继续执行
+      return { success: false, screenshot: undefined, error: err };
+    });
+
+    const { success, screenshot, error: screenshotError } = screenshotResult;
+    if (!success) {
+      logger.warn('获取页面截图失败，将继续保存页面', screenshotError);
+    } else {
+      logger.info('成功获取页面截图', { screenshotLength: screenshot?.length });
+    }
+
     // 准备保存参数
     const saveParams: SavePageParams = {
       title,
@@ -35,14 +63,24 @@ export const saveCurrentPage = async (params?: {
       favicon,
       screenshot: success ? screenshot : undefined
     };
-    
+
     // 保存到数据库
-    const savedPage = await savedPagesDB.savePage(saveParams);
-    
+    logger.debug('正在保存页面到数据库', { url, title });
+    const savedPage = await savedPagesDB.savePage(saveParams).catch(err => {
+      logger.error('保存页面到数据库失败', err);
+      throw new Error(`保存页面到数据库失败: ${err.message || '未知错误'}`);
+    });
+
+    logger.info('页面保存成功', { id: savedPage.id, title: savedPage.title, url: savedPage.url });
     return savedPage;
   } catch (error) {
-    console.error('保存页面失败:', error);
-    throw new Error('保存页面失败');
+    logger.error('保存页面过程中发生错误', error);
+    // 重新抛出错误，但保留原始错误信息
+    if (error instanceof Error) {
+      throw error;
+    } else {
+      throw new Error(`保存页面失败: ${error}`);
+    }
   }
 };
 
@@ -140,11 +178,11 @@ export const getAllTags = async (): Promise<string[]> => {
 export const exportSavedPages = async (ids?: string[]): Promise<SavedPage[]> => {
   try {
     const allPages = await savedPagesDB.getAllPages();
-    
+
     if (!ids || ids.length === 0) {
       return allPages;
     }
-    
+
     return allPages.filter(page => ids.includes(page.id));
   } catch (error) {
     console.error('导出页面失败:', error);
@@ -160,7 +198,7 @@ export const exportSavedPages = async (ids?: string[]): Promise<SavedPage[]> => 
 export const importSavedPages = async (pages: SavedPage[]): Promise<number> => {
   try {
     let importedCount = 0;
-    
+
     for (const page of pages) {
       await savedPagesDB.savePage({
         title: page.title,
@@ -173,10 +211,10 @@ export const importSavedPages = async (pages: SavedPage[]): Promise<number> => {
         favicon: page.favicon,
         screenshot: page.screenshot
       });
-      
+
       importedCount++;
     }
-    
+
     return importedCount;
   } catch (error) {
     console.error('导入页面失败:', error);

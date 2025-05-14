@@ -8,7 +8,8 @@ const chromeMV3Permissions = [
   "activeTab",
   "scripting",
   "declarativeNetRequest",
-  "action",
+  // "action" 可能在某些浏览器版本中不被识别，使用 browserAction 或 pageAction 代替
+  "browserAction", // 对于较旧的Chrome版本
   "unlimitedStorage",
   "contextMenus",
   "tts",
@@ -79,7 +80,8 @@ export default defineConfig({
         : "__MSG_extName__",
     description: "__MSG_extDescription__",
     default_locale: "en",
-    action: {},
+    // 使用条件判断，根据不同浏览器使用不同的配置
+    ...(process.env.TARGET === "firefox" ? { browser_action: {} } : { action: {} }),
     author: "n4ze3m",
     browser_specific_settings:
       process.env.TARGET === "firefox"

@@ -2,6 +2,7 @@
  * 保存页面数据库模块
  * 使用 IndexedDB 存储保存的网页内容
  */
+import logger from '@/utils/logger';
 
 // 数据库名称和版本
 const DB_NAME = 'page-assist-saved-pages';
@@ -61,29 +62,41 @@ export const generateID = () => {
  * 打开数据库连接
  */
 const openDatabase = (): Promise<IDBDatabase> => {
+  logger.debug(`正在打开数据库: ${DB_NAME}, 版本: ${DB_VERSION}`);
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = (event) => {
-      reject(new Error('无法打开数据库'));
+      const error = request.error;
+      logger.error('打开数据库失败', {
+        errorName: error?.name,
+        errorMessage: error?.message
+      });
+      reject(new Error(`无法打开数据库: ${error?.message || '未知错误'}`));
     };
 
     request.onsuccess = (event) => {
+      logger.debug('数据库连接成功打开');
       resolve(request.result);
     };
 
     request.onupgradeneeded = (event) => {
+      logger.info(`数据库升级: 从版本 ${event.oldVersion} 到 ${event.newVersion}`);
       const db = request.result;
-      
+
       // 如果存储对象不存在，则创建
       if (!db.objectStoreNames.contains(STORE_NAME)) {
+        logger.info(`创建存储对象: ${STORE_NAME}`);
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        
+
         // 创建索引
+        logger.debug('创建数据库索引');
         store.createIndex('url', 'url', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
         store.createIndex('updatedAt', 'updatedAt', { unique: false });
         store.createIndex('tags', 'tags', { unique: false, multiEntry: true });
+        logger.info('数据库结构初始化完成');
       }
     };
   });
@@ -97,42 +110,76 @@ export class SavedPagesDB {
    * 保存页面到数据库
    */
   async savePage(params: SavePageParams): Promise<SavedPage> {
-    const db = await openDatabase();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      
-      const now = Date.now();
-      const page: SavedPage = {
-        id: generateID(),
-        title: params.title,
-        url: params.url,
-        content: params.content,
-        html: params.html,
-        type: params.type,
-        tags: params.tags || [],
-        notes: params.notes || '',
-        createdAt: now,
-        updatedAt: now,
-        favicon: params.favicon,
-        screenshot: params.screenshot
-      };
-      
-      const request = store.add(page);
-      
-      request.onsuccess = () => {
-        resolve(page);
-      };
-      
-      request.onerror = () => {
-        reject(new Error('保存页面失败'));
-      };
-      
-      transaction.oncomplete = () => {
-        db.close();
-      };
+    logger.debug('开始保存页面到数据库', {
+      title: params.title,
+      url: params.url,
+      type: params.type,
+      contentLength: params.content?.length,
+      htmlLength: params.html?.length,
+      hasScreenshot: !!params.screenshot
     });
+
+    try {
+      const db = await openDatabase();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+
+        transaction.onerror = (event) => {
+          const error = transaction.error;
+          logger.error('数据库事务错误', {
+            errorName: error?.name,
+            errorMessage: error?.message
+          });
+          reject(new Error(`数据库事务错误: ${error?.message || '未知错误'}`));
+        };
+
+        const now = Date.now();
+        const pageId = generateID();
+        logger.debug(`生成页面ID: ${pageId}`);
+
+        const page: SavedPage = {
+          id: pageId,
+          title: params.title,
+          url: params.url,
+          content: params.content,
+          html: params.html,
+          type: params.type,
+          tags: params.tags || [],
+          notes: params.notes || '',
+          createdAt: now,
+          updatedAt: now,
+          favicon: params.favicon,
+          screenshot: params.screenshot
+        };
+
+        logger.debug('准备添加页面到数据库', { id: page.id });
+        const request = store.add(page);
+
+        request.onsuccess = () => {
+          logger.info('页面成功保存到数据库', { id: page.id, title: page.title });
+          resolve(page);
+        };
+
+        request.onerror = () => {
+          const error = request.error;
+          logger.error('保存页面失败', {
+            errorName: error?.name,
+            errorMessage: error?.message
+          });
+          reject(new Error(`保存页面失败: ${error?.message || '未知错误'}`));
+        };
+
+        transaction.oncomplete = () => {
+          logger.debug('数据库事务完成，关闭数据库连接');
+          db.close();
+        };
+      });
+    } catch (error) {
+      logger.error('保存页面过程中发生错误', error);
+      throw error;
+    }
   }
 
   /**
@@ -140,44 +187,44 @@ export class SavedPagesDB {
    */
   async getAllPages(params?: QueryParams): Promise<SavedPage[]> {
     const db = await openDatabase();
-    
+
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const index = store.index('updatedAt');
-      
+
       const request = index.openCursor(null, 'prev');
       const pages: SavedPage[] = [];
-      
+
       request.onsuccess = (event) => {
         const cursor = request.result;
-        
+
         if (cursor) {
           const page = cursor.value as SavedPage;
-          
+
           // 如果有查询参数，进行过滤
           let shouldInclude = true;
-          
+
           if (params) {
             // 按标签过滤
             if (params.tags && params.tags.length > 0) {
               shouldInclude = params.tags.some(tag => page.tags.includes(tag));
             }
-            
+
             // 按搜索文本过滤
             if (shouldInclude && params.searchText) {
               const searchText = params.searchText.toLowerCase();
-              shouldInclude = 
-                page.title.toLowerCase().includes(searchText) || 
+              shouldInclude =
+                page.title.toLowerCase().includes(searchText) ||
                 page.content.toLowerCase().includes(searchText) ||
                 page.notes.toLowerCase().includes(searchText);
             }
           }
-          
+
           if (shouldInclude) {
             pages.push(page);
           }
-          
+
           cursor.continue();
         } else {
           // 应用分页
@@ -190,11 +237,11 @@ export class SavedPagesDB {
           }
         }
       };
-      
+
       request.onerror = () => {
         reject(new Error('获取页面失败'));
       };
-      
+
       transaction.oncomplete = () => {
         db.close();
       };
@@ -206,21 +253,21 @@ export class SavedPagesDB {
    */
   async getPageById(id: string): Promise<SavedPage | null> {
     const db = await openDatabase();
-    
+
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
-      
+
       const request = store.get(id);
-      
+
       request.onsuccess = () => {
         resolve(request.result || null);
       };
-      
+
       request.onerror = () => {
         reject(new Error('获取页面失败'));
       };
-      
+
       transaction.oncomplete = () => {
         db.close();
       };
@@ -232,42 +279,42 @@ export class SavedPagesDB {
    */
   async updatePage(id: string, updates: Partial<SavedPage>): Promise<SavedPage> {
     const db = await openDatabase();
-    
+
     return new Promise(async (resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      
+
       // 先获取现有页面
       const getRequest = store.get(id);
-      
+
       getRequest.onsuccess = () => {
         if (!getRequest.result) {
           reject(new Error('页面不存在'));
           return;
         }
-        
+
         const page = getRequest.result as SavedPage;
         const updatedPage: SavedPage = {
           ...page,
           ...updates,
           updatedAt: Date.now()
         };
-        
+
         const updateRequest = store.put(updatedPage);
-        
+
         updateRequest.onsuccess = () => {
           resolve(updatedPage);
         };
-        
+
         updateRequest.onerror = () => {
           reject(new Error('更新页面失败'));
         };
       };
-      
+
       getRequest.onerror = () => {
         reject(new Error('获取页面失败'));
       };
-      
+
       transaction.oncomplete = () => {
         db.close();
       };
@@ -279,21 +326,21 @@ export class SavedPagesDB {
    */
   async deletePage(id: string): Promise<void> {
     const db = await openDatabase();
-    
+
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      
+
       const request = store.delete(id);
-      
+
       request.onsuccess = () => {
         resolve();
       };
-      
+
       request.onerror = () => {
         reject(new Error('删除页面失败'));
       };
-      
+
       transaction.oncomplete = () => {
         db.close();
       };
@@ -306,11 +353,11 @@ export class SavedPagesDB {
   async getAllTags(): Promise<string[]> {
     const pages = await this.getAllPages();
     const tagSet = new Set<string>();
-    
+
     pages.forEach(page => {
       page.tags.forEach(tag => tagSet.add(tag));
     });
-    
+
     return Array.from(tagSet);
   }
 }
