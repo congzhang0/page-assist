@@ -44,11 +44,13 @@ export default defineConfig({
         external: ["langchain", "@langchain/community"],
         // 添加对 pdfjs-dist 的特殊处理
         onwarn(warning, warn) {
-          // 忽略 pdfjs-dist 相关的顶级 await 警告
-          if (warning.code === 'INVALID_EXPORT_OPTION' &&
-              warning.message &&
-              warning.message.includes('pdfjs-dist')) {
-            return;
+          // 忽略 pdfjs-dist 相关的警告
+          if (warning.code === 'INVALID_EXPORT_OPTION' ||
+              warning.code === 'CIRCULAR_DEPENDENCY' ||
+              warning.code === 'UNRESOLVED_IMPORT') {
+            if (warning.message && warning.message.includes('pdfjs-dist')) {
+              return;
+            }
           }
           warn(warning);
         }
@@ -56,7 +58,12 @@ export default defineConfig({
     },
     // 优化 pdfjs-dist 的处理
     optimizeDeps: {
-      exclude: ['pdfjs-dist']
+      include: ['pdfjs-dist'],
+      esbuildOptions: {
+        define: {
+          global: 'globalThis'
+        }
+      }
     }
   }),
   entrypointsDir:

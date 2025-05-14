@@ -137,6 +137,8 @@ export default defineBackground({
       sidePanel: browser.i18n.getMessage("openSidePanelToChat")
     }
 
+    // contextMenuId 已在文件顶部定义
+
     browser.contextMenus.onClicked.addListener(async (info, tab) => {
       if (info.menuItemId === "open-side-panel-pa") {
         chrome.sidePanel.open({

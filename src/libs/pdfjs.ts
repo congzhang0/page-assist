@@ -1,9 +1,14 @@
 // 导入 pdfjs-dist 3.x 版本
-import * as pdfDist from "pdfjs-dist";
-import * as pdfWorker from "pdfjs-dist/build/pdf.worker.js";
+import * as PDFJS from "pdfjs-dist";
 
 // 设置 worker
-pdfDist.GlobalWorkerOptions.workerSrc = pdfWorker;
+// 使用动态导入避免构建问题
+const pdfjsWorker = new URL(
+  "pdfjs-dist/build/pdf.worker.js",
+  import.meta.url
+).toString();
 
-// 导出 pdfDist 模块
-export { pdfDist };
+PDFJS.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+// 导出 PDFJS 模块
+export const pdfDist = PDFJS;
