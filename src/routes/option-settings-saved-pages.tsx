@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined } from "@ant-design/icons";
+import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography } from "antd";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
@@ -25,7 +25,11 @@ const OptionSettingsSavedPages: React.FC = () => {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editNotes, setEditNotes] = useState("");
   const [editRating, setEditRating] = useState(0);
+  const [editSummary, setEditSummary] = useState("");
   const [newTag, setNewTag] = useState("");
+  const [htmlModalVisible, setHtmlModalVisible] = useState(false);
+  const [summaryModalVisible, setSummaryModalVisible] = useState(false);
+  const [currentViewPage, setCurrentViewPage] = useState<SavedPage | null>(null);
 
   // 加载保存的页面
   const loadPages = async () => {
@@ -116,6 +120,7 @@ const OptionSettingsSavedPages: React.FC = () => {
     setEditTags(page.tags);
     setEditNotes(page.notes);
     setEditRating(page.rating || 0);
+    setEditSummary(page.summary || "");
     setEditModalVisible(true);
   };
 
@@ -128,7 +133,8 @@ const OptionSettingsSavedPages: React.FC = () => {
         title: editTitle,
         tags: editTags,
         notes: editNotes,
-        rating: editRating
+        rating: editRating,
+        summary: editSummary
       });
 
       message.success("页面已更新");
@@ -223,6 +229,18 @@ const OptionSettingsSavedPages: React.FC = () => {
     window.open(page.url, "_blank");
   };
 
+  // 查看原始HTML
+  const handleViewHtml = (page: SavedPage) => {
+    setCurrentViewPage(page);
+    setHtmlModalVisible(true);
+  };
+
+  // 查看摘要详情
+  const handleViewSummary = (page: SavedPage) => {
+    setCurrentViewPage(page);
+    setSummaryModalVisible(true);
+  };
+
   return (
     <div className="p-4">
       <div className="mb-4 flex justify-between items-center">
@@ -271,6 +289,12 @@ const OptionSettingsSavedPages: React.FC = () => {
             actions={[
               <Tooltip title="查看原页面">
                 <Button icon={<EyeOutlined />} onClick={() => handleView(page)} />
+              </Tooltip>,
+              <Tooltip title="查看原始HTML">
+                <Button icon={<CodeOutlined />} onClick={() => handleViewHtml(page)} />
+              </Tooltip>,
+              <Tooltip title="查看摘要详情">
+                <Button icon={<FileTextOutlined />} onClick={() => handleViewSummary(page)} />
               </Tooltip>,
               <Tooltip title="编辑">
                 <Button icon={<EditOutlined />} onClick={() => handleEdit(page)} />
@@ -374,13 +398,86 @@ const OptionSettingsSavedPages: React.FC = () => {
         </div>
 
         <div className="mb-4">
+          <label className="block mb-1">摘要</label>
+          <Input.TextArea
+            value={editSummary}
+            onChange={e => setEditSummary(e.target.value)}
+            rows={3}
+            placeholder="页面内容摘要"
+          />
+        </div>
+
+        <div className="mb-4">
           <label className="block mb-1">备注</label>
           <Input.TextArea
             value={editNotes}
             onChange={e => setEditNotes(e.target.value)}
-            rows={4}
+            rows={3}
           />
         </div>
+      </Modal>
+
+      {/* 原始HTML查看模态框 */}
+      <Modal
+        title="原始HTML内容"
+        open={htmlModalVisible}
+        onCancel={() => setHtmlModalVisible(false)}
+        width={800}
+        footer={null}
+      >
+        {currentViewPage?.html ? (
+          <div className="max-h-[70vh] overflow-auto">
+            <Typography.Paragraph>
+              <pre className="whitespace-pre-wrap break-all bg-gray-100 dark:bg-gray-800 p-4 rounded">
+                {currentViewPage.html}
+              </pre>
+            </Typography.Paragraph>
+          </div>
+        ) : (
+          <Typography.Paragraph className="text-gray-500">
+            没有保存原始HTML内容或当前页面不是HTML类型。
+          </Typography.Paragraph>
+        )}
+      </Modal>
+
+      {/* 摘要详情模态框 */}
+      <Modal
+        title="内容摘要详情"
+        open={summaryModalVisible}
+        onCancel={() => setSummaryModalVisible(false)}
+        footer={null}
+      >
+        {currentViewPage ? (
+          <div>
+            <div className="mb-4">
+              <h3 className="font-bold mb-2">内容摘要</h3>
+              <Typography.Paragraph className="bg-gray-50 dark:bg-gray-800 p-3 rounded">
+                {currentViewPage.summary || "未生成摘要"}
+              </Typography.Paragraph>
+            </div>
+            
+            <div className="mb-4">
+              <h3 className="font-bold mb-2">内容评分</h3>
+              <div className="flex items-center">
+                <Rate disabled value={currentViewPage.rating || 0} />
+                <span className="ml-2 text-gray-500">{currentViewPage.rating || 0}/5</span>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <h3 className="font-bold mb-2">关键词标签</h3>
+              <div>
+                {currentViewPage.tags.map(tag => (
+                  <Tag key={tag} color="blue" className="mr-1 mb-1">{tag}</Tag>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Typography.Paragraph className="text-gray-500">
+            无法加载页面信息。
+          </Typography.Paragraph>
+        )}
       </Modal>
     </div>
   );

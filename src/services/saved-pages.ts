@@ -80,7 +80,7 @@ export const saveCurrentPage = async (params?: {
       title,
       url,
       content,
-      html: type === 'html' ? content : '', // 如果是HTML类型，保存原始HTML
+      html: content, // 保存所有类型页面的原始内容
       type,
       tags: mergedTags,
       notes: params?.notes || '',

@@ -127,15 +127,17 @@ ${content.length > 8000 ? content.substring(0, 8000) + "..." : content}
     // 调用模型
     logger.debug('调用LLM模型生成摘要', { modelName: model._llmType() });
     
-    // 创建消息
+    // 创建消息 - 确保消息格式正确
+    // 使用BaseMessage格式创建消息，避免't is not iterable'错误
+    const { HumanMessage } = await import("@langchain/core/messages");
     const messages = [
-      {
+      new HumanMessage({
         content: prompt,
-        role: "user",
-      },
+      }),
     ];
     
-    // 获取响应
+    // 获取响应 - 使用正确的消息格式调用模型
+    // 修复't is not iterable'错误，确保消息格式符合模型要求
     const response = await model.invoke(messages);
     logger.debug('LLM模型返回响应', { responseLength: response.content?.length });
     
