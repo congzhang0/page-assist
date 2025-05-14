@@ -348,7 +348,7 @@ const OptionSettingsSavedPages: React.FC = () => {
           pageSize={PAGE_SIZE}
           total={total}
           onChange={setCurrentPage}
-          showSizeChanger={false}
+          size="small"
         />
       </div>
 
@@ -455,7 +455,7 @@ const OptionSettingsSavedPages: React.FC = () => {
                 {currentViewPage.summary || "未生成摘要"}
               </Typography.Paragraph>
             </div>
-            
+
             <div className="mb-4">
               <h3 className="font-bold mb-2">内容评分</h3>
               <div className="flex items-center">

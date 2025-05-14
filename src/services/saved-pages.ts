@@ -7,6 +7,7 @@ import { getDataFromCurrentTab } from "@/libs/get-html";
 import { getScreenshotFromCurrentTab } from "@/libs/get-screenshot";
 import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/saved-pages";
 import { generateSummary } from "@/services/llm-service";
+import { browser } from "wxt/browser";
 
 /**
  * 保存当前页面到数据库
@@ -59,6 +60,7 @@ export const saveCurrentPage = async (params?: {
     let rating = 0;
 
     try {
+      // 尝试获取LLM模型并生成摘要
       const summaryResult = await generateSummary(content, title, url);
       summary = summaryResult.summary;
       autoTags = summaryResult.keywords;
@@ -69,6 +71,18 @@ export const saveCurrentPage = async (params?: {
         rating
       });
     } catch (error) {
+      // 如果错误是由于未选择模型导致的，打开侧边栏让用户配置
+      if (error instanceof Error && error.message.includes('未选择模型')) {
+        logger.warn('未选择LLM模型，将打开侧边栏让用户配置', error);
+        // 通知background打开侧边栏
+        try {
+          await browser.runtime.sendMessage({ type: 'open_sidebar_for_model_config' });
+          throw new Error('请先在侧边栏中配置LLM模型，然后再尝试保存页面');
+        } catch (msgError) {
+          logger.error('发送打开侧边栏消息失败', msgError);
+          throw new Error('未选择LLM模型，请先配置模型后再尝试保存页面');
+        }
+      }
       logger.warn('生成摘要和关键词失败，将继续保存页面', error);
     }
 

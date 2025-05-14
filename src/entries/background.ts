@@ -143,6 +143,18 @@ export default defineBackground({
         } catch (menuError) {
           console.error("创建保存页面菜单项时出错:", menuError);
         }
+        
+        // 添加查看已保存网页的菜单项
+        try {
+          browser.contextMenus.create({
+            id: "view-saved-pages-pa",
+            title: "查看已保存的网页",
+            contexts: ["page"]
+          });
+          console.log("已创建查看已保存网页菜单项");
+        } catch (menuError) {
+          console.error("创建查看已保存网页菜单项时出错:", menuError);
+        }
 
         console.log("所有上下文菜单项创建完成");
       } catch (error) {
@@ -152,7 +164,7 @@ export default defineBackground({
 
 
     browser.runtime.onMessage.addListener(async (message) => {
-      if (message.type === "sidepanel") {
+      if (message.type === "sidepanel" || message.type === "open_sidebar_for_model_config") {
         await browser.sidebarAction.open()
       } else if (message.type === "pull_model") {
         const ollamaURL = await getOllamaURL()
@@ -297,38 +309,37 @@ export default defineBackground({
           console.log("调用 saveCurrentPage 函数");
           const savedPage = await saveCurrentPage();
           console.log("页面保存成功", savedPage);
-
+          
           // 清除保存中通知
           browser.notifications.clear(savingNotificationId);
-
+          
           // 显示成功通知
-          browser.notifications.create({
+          browser.notifications.create("save-success-notification", {
             type: "basic",
             iconUrl: browser.runtime.getURL("assets/icon-128.png"),
-            title: "页面已保存",
-            message: `已成功保存页面: ${savedPage.title}`
+            title: "页面保存成功",
+            message: `已成功保存页面：${savedPage.title}`
           });
-
         } catch (error) {
-          console.error("保存页面失败:", error);
-
-          // 记录详细错误信息
-          if (error instanceof Error) {
-            console.error("错误详情:", {
-              message: error.message,
-              stack: error.stack,
-              name: error.name
-            });
-          }
-
+          console.error("保存页面失败", error);
+          
+          // 清除保存中通知
+          browser.notifications.clear(savingNotificationId);
+          
           // 显示错误通知
-          browser.notifications.create({
+          browser.notifications.create("save-error-notification", {
             type: "basic",
             iconUrl: browser.runtime.getURL("assets/icon-128.png"),
             title: "保存页面失败",
-            message: "无法保存当前页面，请稍后重试。详细错误已记录到控制台。"
+            message: error instanceof Error ? error.message : String(error)
           });
         }
+      } else if (info.menuItemId === "view-saved-pages-pa") {
+        console.log("右键菜单：查看已保存的网页");
+        // 打开选项页面并导航到已保存页面的标签
+        browser.tabs.create({
+          url: browser.runtime.getURL("/options.html#/settings/saved-pages")
+        });
       }
     })
 
