@@ -1,5 +1,6 @@
 import { deleteVector, deleteVectorByFileId } from "./vector"
 import { compressText, decompressData, arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/compress"
+import { syncHooks } from "./sync-hooks"
 
 export type Source = {
     source_id: string
@@ -99,6 +100,7 @@ export class PageAssistDocument {
                 if (chrome.runtime.lastError) {
                     reject(chrome.runtime.lastError)
                 } else {
+                    syncHooks.document.afterCreate(document);
                     resolve()
                 }
             })
@@ -124,6 +126,7 @@ export class PageAssistDocument {
                 if (chrome.runtime.lastError) {
                     reject(chrome.runtime.lastError)
                 } else {
+                    syncHooks.document.afterUpdate(document);
                     resolve()
                 }
             })
@@ -136,6 +139,7 @@ export class PageAssistDocument {
                 if (chrome.runtime.lastError) {
                     reject(chrome.runtime.lastError)
                 } else {
+                    syncHooks.document.afterDelete(id);
                     resolve()
                 }
             })

@@ -25,5 +25,25 @@
             "image": "Image (.png)"
         },
         "share": "Share"
+    },
+    "sync": {
+        "title": "Data Synchronization",
+        "enable": "Enable Sync",
+        "proxyEndpoint": "IndexedDB Proxy Endpoint",
+        "proxyEndpointRequired": "Proxy endpoint is required",
+        "wifiOnly": "Only sync on Wi-Fi",
+        "queueStats": "Sync Queue Status",
+        "totalItems": "Total Items",
+        "pendingItems": "Pending Items",
+        "retryItems": "Retry Items",
+        "manualSync": "Sync Now",
+        "cleanExpired": "Clean Expired",
+        "status": {
+            "disabled": "Disabled",
+            "idle": "Ready",
+            "syncing": "Syncing",
+            "error": "Error",
+            "unknown": "Unknown"
+        }
     }
 }

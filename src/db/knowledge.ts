@@ -1,4 +1,5 @@
 import { deleteVector, deleteVectorByFileId } from "./vector"
+import { syncHooks } from "./sync-hooks"
 
 export type Source = {
   source_id: string
@@ -63,6 +64,7 @@ export class PageAssistKnowledge {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          syncHooks.knowledge.afterCreate(knowledge);
           resolve()
         }
       })
@@ -75,6 +77,7 @@ export class PageAssistKnowledge {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          syncHooks.knowledge.afterUpdate(knowledge);
           resolve()
         }
       })
@@ -87,6 +90,7 @@ export class PageAssistKnowledge {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          syncHooks.knowledge.afterDelete(id);
           resolve()
         }
       })
@@ -105,6 +109,7 @@ export class PageAssistKnowledge {
             if (chrome.runtime.lastError) {
               reject(chrome.runtime.lastError)
             } else {
+              syncHooks.knowledge.afterUpdate(data);
               resolve()
             }
           })

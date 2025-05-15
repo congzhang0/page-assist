@@ -25,5 +25,25 @@
             "image": "图片 (.png)"
         },
         "share": "分享"
+    },
+    "sync": {
+        "title": "数据同步",
+        "enable": "启用同步",
+        "proxyEndpoint": "IndexedDB 代理端点",
+        "proxyEndpointRequired": "代理端点不能为空",
+        "wifiOnly": "仅在Wi-Fi下同步",
+        "queueStats": "同步队列状态",
+        "totalItems": "总项目数",
+        "pendingItems": "待同步项",
+        "retryItems": "重试项",
+        "manualSync": "立即同步",
+        "cleanExpired": "清理过期",
+        "status": {
+            "disabled": "已禁用",
+            "idle": "就绪",
+            "syncing": "同步中",
+            "error": "错误",
+            "unknown": "未知"
+        }
     }
 }
