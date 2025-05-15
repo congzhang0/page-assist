@@ -3,6 +3,7 @@ import { browser } from "wxt/browser"
 import { clearBadge, streamDownload } from "@/utils/pull-ollama"
 import { Storage } from "@plasmohq/storage"
 import { getInitialConfig } from "@/services/action"
+import { saveCurrentPage } from "@/services/saved-pages"
 
 export default defineBackground({
   main() {
@@ -18,6 +19,14 @@ export default defineBackground({
     }
     const initialize = async () => {
       try {
+        // 先移除所有现有的上下文菜单项，避免重复ID错误
+        try {
+          browser.contextMenus.removeAll();
+          console.log("已清除所有现有上下文菜单项");
+        } catch (menuError) {
+          console.error("清除上下文菜单时出错:", menuError);
+        }
+
         storage.watch({
           actionIconClick: (value) => {
             const oldValue = value?.oldValue || "webui"
@@ -31,61 +40,131 @@ export default defineBackground({
             const newValue = value?.newValue || "sidePanel"
             if (oldValue !== newValue) {
               contextMenuClick = newValue
-              browser.contextMenus.remove(contextMenuId[oldValue])
-              browser.contextMenus.create({
-                id: contextMenuId[newValue],
-                title: contextMenuTitle[newValue],
-                contexts: ["page", "selection"]
-              })
+              try {
+                browser.contextMenus.remove(contextMenuId[oldValue]);
+                browser.contextMenus.create({
+                  id: contextMenuId[newValue],
+                  title: contextMenuTitle[newValue],
+                  contexts: ["page", "selection"]
+                });
+              } catch (menuError) {
+                console.error("更新上下文菜单时出错:", menuError);
+              }
             }
           }
         })
+
         const data = await getInitialConfig()
         contextMenuClick = data.contextMenuClick
         actionIconClick = data.actionIconClick
 
-        browser.contextMenus.create({
-          id: contextMenuId[contextMenuClick],
-          title: contextMenuTitle[contextMenuClick],
-          contexts: ["page", "selection"]
-        })
-        browser.contextMenus.create({
-          id: "summarize-pa",
-          title: browser.i18n.getMessage("contextSummarize"),
-          contexts: ["selection"]
-        })
+        console.log("开始创建上下文菜单项");
 
-        browser.contextMenus.create({
-          id: "explain-pa",
-          title: browser.i18n.getMessage("contextExplain"),
-          contexts: ["selection"]
-        })
+        // 创建主菜单项
+        try {
+          browser.contextMenus.create({
+            id: contextMenuId[contextMenuClick],
+            title: contextMenuTitle[contextMenuClick],
+            contexts: ["page", "selection"]
+          });
+          console.log(`已创建主菜单项: ${contextMenuId[contextMenuClick]}`);
+        } catch (menuError) {
+          console.error(`创建主菜单项时出错: ${contextMenuId[contextMenuClick]}`, menuError);
+        }
 
-        browser.contextMenus.create({
-          id: "rephrase-pa",
-          title: browser.i18n.getMessage("contextRephrase"),
-          contexts: ["selection"]
-        })
+        // 创建摘要菜单项
+        try {
+          browser.contextMenus.create({
+            id: "summarize-pa",
+            title: browser.i18n.getMessage("contextSummarize"),
+            contexts: ["selection"]
+          });
+          console.log("已创建摘要菜单项");
+        } catch (menuError) {
+          console.error("创建摘要菜单项时出错:", menuError);
+        }
 
-        browser.contextMenus.create({
-          id: "translate-pg",
-          title: browser.i18n.getMessage("contextTranslate"),
-          contexts: ["selection"]
-        })
+        // 创建解释菜单项
+        try {
+          browser.contextMenus.create({
+            id: "explain-pa",
+            title: browser.i18n.getMessage("contextExplain"),
+            contexts: ["selection"]
+          });
+          console.log("已创建解释菜单项");
+        } catch (menuError) {
+          console.error("创建解释菜单项时出错:", menuError);
+        }
 
-        browser.contextMenus.create({
-          id: "custom-pg",
-          title: browser.i18n.getMessage("contextCustom"),
-          contexts: ["selection"]
-        })
+        // 创建改写菜单项
+        try {
+          browser.contextMenus.create({
+            id: "rephrase-pa",
+            title: browser.i18n.getMessage("contextRephrase"),
+            contexts: ["selection"]
+          });
+          console.log("已创建改写菜单项");
+        } catch (menuError) {
+          console.error("创建改写菜单项时出错:", menuError);
+        }
+
+        // 创建翻译菜单项
+        try {
+          browser.contextMenus.create({
+            id: "translate-pg",
+            title: browser.i18n.getMessage("contextTranslate"),
+            contexts: ["selection"]
+          });
+          console.log("已创建翻译菜单项");
+        } catch (menuError) {
+          console.error("创建翻译菜单项时出错:", menuError);
+        }
+
+        // 创建自定义菜单项
+        try {
+          browser.contextMenus.create({
+            id: "custom-pg",
+            title: browser.i18n.getMessage("contextCustom"),
+            contexts: ["selection"]
+          });
+          console.log("已创建自定义菜单项");
+        } catch (menuError) {
+          console.error("创建自定义菜单项时出错:", menuError);
+        }
+
+        // 添加保存当前页面的菜单项
+        try {
+          browser.contextMenus.create({
+            id: "save-page-pa",
+            title: "保存当前页面",
+            contexts: ["page"]
+          });
+          console.log("已创建保存页面菜单项");
+        } catch (menuError) {
+          console.error("创建保存页面菜单项时出错:", menuError);
+        }
+        
+        // 添加查看已保存网页的菜单项
+        try {
+          browser.contextMenus.create({
+            id: "view-saved-pages-pa",
+            title: "查看已保存的网页",
+            contexts: ["page"]
+          });
+          console.log("已创建查看已保存网页菜单项");
+        } catch (menuError) {
+          console.error("创建查看已保存网页菜单项时出错:", menuError);
+        }
+
+        console.log("所有上下文菜单项创建完成");
       } catch (error) {
-        console.error("Error in initLogic:", error)
+        console.error("初始化过程中出错:", error)
       }
     }
 
 
     browser.runtime.onMessage.addListener(async (message) => {
-      if (message.type === "sidepanel") {
+      if (message.type === "sidepanel" || message.type === "open_sidebar_for_model_config") {
         await browser.sidebarAction.open()
       } else if (message.type === "pull_model") {
         const ollamaURL = await getOllamaURL()
@@ -128,6 +207,8 @@ export default defineBackground({
       webui: browser.i18n.getMessage("openOptionToChat"),
       sidePanel: browser.i18n.getMessage("openSidePanelToChat")
     }
+
+    // contextMenuId 已在文件顶部定义
 
     browser.contextMenus.onClicked.addListener(async (info, tab) => {
       if (info.menuItemId === "open-side-panel-pa") {
@@ -212,6 +293,53 @@ export default defineBackground({
           },
           isCopilotRunning ? 0 : 5000
         )
+      } else if (info.menuItemId === "save-page-pa") {
+        console.log("右键菜单：开始保存当前页面", { tabId: tab?.id, url: tab?.url });
+        try {
+          // 显示保存中通知
+          const savingNotificationId = "saving-page-notification";
+          browser.notifications.create(savingNotificationId, {
+            type: "basic",
+            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+            title: "正在保存页面",
+            message: "正在处理页面内容，请稍候..."
+          });
+
+          // 保存当前页面
+          console.log("调用 saveCurrentPage 函数");
+          const savedPage = await saveCurrentPage();
+          console.log("页面保存成功", savedPage);
+          
+          // 清除保存中通知
+          browser.notifications.clear(savingNotificationId);
+          
+          // 显示成功通知
+          browser.notifications.create("save-success-notification", {
+            type: "basic",
+            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+            title: "页面保存成功",
+            message: `已成功保存页面：${savedPage.title}`
+          });
+        } catch (error) {
+          console.error("保存页面失败", error);
+          
+          // 清除保存中通知
+          browser.notifications.clear(savingNotificationId);
+          
+          // 显示错误通知
+          browser.notifications.create("save-error-notification", {
+            type: "basic",
+            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
+            title: "保存页面失败",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+      } else if (info.menuItemId === "view-saved-pages-pa") {
+        console.log("右键菜单：查看已保存的网页");
+        // 打开选项页面并导航到已保存页面的标签
+        browser.tabs.create({
+          url: browser.runtime.getURL("/options.html#/settings/saved-pages")
+        });
       }
     })
 

@@ -8,137 +8,266 @@ import {
 } from "@/parser/twitter"
 import { isGoogleDocs, parseGoogleDocs } from "@/parser/google-docs"
 import { cleanUnwantedUnicode } from "@/utils/clean"
+import logger from "@/utils/logger"
 
 const _getHtml = () => {
   const url = window.location.href
+  const title = document.title
+  const favicon = document.querySelector('link[rel="icon"]')?.getAttribute('href') ||
+                 document.querySelector('link[rel="shortcut icon"]')?.getAttribute('href') ||
+                 `${window.location.origin}/favicon.ico`
+
   if (document.contentType === "application/pdf") {
-    return { url, content: "", type: "pdf" }
+    return { url, title, content: "", type: "pdf", favicon }
   }
 
   return {
     content: document.documentElement.outerHTML,
     url,
-    type: "html"
+    title,
+    type: "html",
+    favicon
   }
 }
 
 export const getDataFromCurrentTab = async () => {
-  const result = new Promise((resolve) => {
+  logger.debug('开始获取当前标签页内容');
+
+  const result = await new Promise((resolve, reject) => {
     if (import.meta.env.BROWSER === "chrome" || import.meta.env.BROWSER === "edge") {
+      logger.debug('使用 Chrome/Edge API 获取标签页内容');
       chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-        const tab = tabs[0]
-
-        const data = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: _getHtml
-        })
-
-        if (data.length > 0) {
-          resolve(data[0].result)
+        if (!tabs || tabs.length === 0) {
+          logger.error('无法获取当前标签页');
+          reject(new Error('无法获取当前标签页'));
+          return;
         }
-      })
+
+        const tab = tabs[0];
+        logger.debug('获取到当前标签页', { tabId: tab.id, url: tab.url });
+
+        if (!tab.id) {
+          logger.error('标签页ID无效');
+          reject(new Error('标签页ID无效'));
+          return;
+        }
+
+        try {
+          const data = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: _getHtml
+          });
+
+          if (data && data.length > 0) {
+            logger.debug('成功执行内容脚本获取HTML', {
+              resultType: data[0].result.type,
+              contentLength: data[0].result.content?.length
+            });
+            resolve(data[0].result);
+          } else {
+            logger.error('内容脚本执行结果为空');
+            reject(new Error('内容脚本执行结果为空'));
+          }
+        } catch (error) {
+          logger.error('执行内容脚本失败', error);
+          reject(error);
+        }
+      });
     } else {
+      logger.debug('使用 Firefox/其他浏览器 API 获取标签页内容');
       browser.tabs
         .query({ active: true, currentWindow: true })
         .then(async (tabs) => {
-          const tab = tabs[0]
+          if (!tabs || tabs.length === 0) {
+            logger.error('无法获取当前标签页');
+            reject(new Error('无法获取当前标签页'));
+            return;
+          }
+
+          const tab = tabs[0];
+          logger.debug('获取到当前标签页', { tabId: tab.id, url: tab.url });
+
+          if (!tab.id) {
+            logger.error('标签页ID无效');
+            reject(new Error('标签页ID无效'));
+            return;
+          }
+
           try {
             const data = await browser.scripting.executeScript({
               target: { tabId: tab.id },
               func: _getHtml
-            })
+            });
 
-            if (data.length > 0) {
-              resolve(data[0].result)
+            if (data && data.length > 0) {
+              logger.debug('成功执行内容脚本获取HTML', {
+                resultType: data[0].result.type,
+                contentLength: data[0].result.content?.length
+              });
+              resolve(data[0].result);
+            } else {
+              logger.error('内容脚本执行结果为空');
+              reject(new Error('内容脚本执行结果为空'));
             }
           } catch (e) {
-            console.error("error", e)
-            // this is a weird method but it works
+            logger.error('执行内容脚本失败', e);
+
+            // Firefox PDF 特殊处理
             if (import.meta.env.BROWSER === "firefox") {
-              // all I need is to get the pdf url but somehow 
-              // firefox won't allow extensions to run content scripts on pdf https://bugzilla.mozilla.org/show_bug.cgi?id=1454760
-              // so I set up a weird method to fix this issue by asking tab to give the url 
-              // and then I can get the pdf url
+              logger.info('检测到 Firefox PDF 页面，使用替代方法获取内容');
+              // Firefox won't allow extensions to run content scripts on pdf
+              // https://bugzilla.mozilla.org/show_bug.cgi?id=1454760
               const result = {
                 url: tab.url,
+                title: tab.title || "PDF Document",
                 content: "",
-                type: "pdf"
-              }
-              resolve(result)
+                type: "pdf",
+                favicon: tab.favIconUrl
+              };
+              logger.debug('使用替代方法获取 PDF 内容成功', { url: tab.url });
+              resolve(result);
+            } else {
+              reject(e);
             }
           }
         })
+        .catch(error => {
+          logger.error('查询标签页失败', error);
+          reject(error);
+        });
     }
   }) as Promise<{
     url: string
+    title: string
     content: string
     type: string
-  }>
+    favicon?: string
+  }>;
 
-  const { content, type, url } = await result
+  logger.debug('成功获取页面基本数据', {
+    url: result.url,
+    title: result.title,
+    type: result.type
+  });
+
+  const { content, type, url, title, favicon } = result;
 
   if (type === "pdf") {
-    const res = await fetch(url)
-    const data = await res.arrayBuffer()
-    let pdfHtml: {
-      content: string
-      page: number
-    }[] = []
-    const pdf = await getPdf(data)
-
-    for (let i = 1; i <= pdf.numPages; i += 1) {
-      const page = await pdf.getPage(i)
-      const content = await page.getTextContent()
-
-      if (content?.items.length === 0) {
-        continue
+    logger.debug('检测到PDF文件，开始处理PDF内容', { url });
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        logger.error('获取PDF文件失败', { status: res.status, statusText: res.statusText });
+        throw new Error(`获取PDF文件失败: ${res.status} ${res.statusText}`);
       }
 
-      const text = content?.items
-        .map((item: any) => item.str)
-        .join("\n")
-        .replace(/\x00/g, "")
-        .trim()
-      pdfHtml.push({
-        content: text,
-        page: i
-      })
-    }
+      const data = await res.arrayBuffer();
+      logger.debug('成功获取PDF文件数据', { dataSize: data.byteLength });
 
-    return {
-      url,
-      content: "",
-      pdf: pdfHtml,
-      type: "pdf"
+      let pdfHtml: {
+        content: string
+        page: number
+      }[] = [];
+
+      const pdf = await getPdf(data);
+      logger.info('成功解析PDF文件', { numPages: pdf.numPages });
+
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        logger.debug(`处理PDF第${i}页`);
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+
+        if (!content || content.items.length === 0) {
+          logger.debug(`PDF第${i}页没有文本内容，跳过`);
+          continue;
+        }
+
+        const text = content.items
+          .map((item: any) => item.str)
+          .join("\n")
+          .replace(/\x00/g, "")
+          .trim();
+
+        pdfHtml.push({
+          content: text,
+          page: i
+        });
+
+        logger.debug(`成功提取PDF第${i}页文本`, { textLength: text.length });
+      }
+
+      logger.info('PDF处理完成', { totalPages: pdfHtml.length });
+      return {
+        url,
+        title,
+        content: "",
+        pdf: pdfHtml,
+        type: "pdf",
+        favicon
+      };
+    } catch (error) {
+      logger.error('处理PDF文件时出错', error);
+      // 返回基本信息，即使PDF处理失败
+      return {
+        url,
+        title,
+        content: "PDF处理失败，无法提取内容",
+        pdf: [],
+        type: "pdf",
+        favicon
+      };
     }
   }
   if (isTwitterTimeline(url)) {
-    const data = parseTwitterTimeline(content)
+    logger.debug('检测到Twitter时间线页面，使用专用解析器', { url });
+    const data = parseTwitterTimeline(content);
+    logger.info('成功解析Twitter时间线内容', { contentLength: data?.length });
     return {
       url,
+      title,
       content: data,
       type: "html",
-      pdf: []
-    }
+      pdf: [],
+      favicon
+    };
   } else if (isTweet(url)) {
-    const data = parseTweet(content)
+    logger.debug('检测到Twitter推文页面，使用专用解析器', { url });
+    const data = parseTweet(content);
+    logger.info('成功解析Twitter推文内容', { contentLength: data?.length });
     return {
       url,
+      title,
       content: data,
       type: "html",
-      pdf: []
-    }
+      pdf: [],
+      favicon
+    };
   } else if (isGoogleDocs(url)) {
-    const data = await parseGoogleDocs()
-    if (data) {
-      return {
-        url,
-        content: cleanUnwantedUnicode(data),
-        type: "html",
-        pdf: []
+    logger.debug('检测到Google Docs文档，使用专用解析器', { url });
+    try {
+      const data = await parseGoogleDocs();
+      if (data) {
+        const cleanedData = cleanUnwantedUnicode(data);
+        logger.info('成功解析Google Docs内容', { contentLength: cleanedData?.length });
+        return {
+          url,
+          title,
+          content: cleanedData,
+          type: "html",
+          pdf: [],
+          favicon
+        };
+      } else {
+        logger.warn('Google Docs解析返回空内容');
       }
+    } catch (error) {
+      logger.error('解析Google Docs内容失败', error);
     }
   }
-  const data = defaultExtractContent(content)
-  return { url, content: data, type, pdf: [] }
+
+  // 默认内容提取
+  logger.debug('使用默认内容提取器处理页面', { url, contentLength: content?.length });
+  const data = defaultExtractContent(content);
+  logger.info('成功提取页面内容', { extractedContentLength: data?.length });
+  return { url, title, content: data, type, pdf: [], favicon };
 }

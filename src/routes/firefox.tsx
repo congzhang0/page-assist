@@ -15,6 +15,7 @@ const OptionKnowledgeBase = lazy(() => import("./option-settings-knowledge"))
 const OptionAbout = lazy(() => import("./option-settings-about"))
 const OptionRagSettings = lazy(() => import("./option-rag"))
 const OptionOpenAI = lazy(() => import("./option-settings-openai"))
+const OptionSavedPages = lazy(() => import("./option-settings-saved-pages"))
 
 export const OptionRoutingFirefox = () => {
   return (
@@ -29,6 +30,7 @@ export const OptionRoutingFirefox = () => {
       <Route path="/settings/knowledge" element={<OptionKnowledgeBase />} />
       <Route path="/settings/about" element={<OptionAbout />} />
       <Route path="/settings/rag" element={<OptionRagSettings />} />
+      <Route path="/settings/saved-pages" element={<OptionSavedPages />} />
     </Routes>
   )
 }

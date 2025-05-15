@@ -50,7 +50,7 @@
     "mermaid": "^11.4.1",
     "ml-distance": "^4.0.1",
     "openai": "^4.95.1",
-    "pdfjs-dist": "4.0.379",
+    "pdfjs-dist": "3.11.174",
     "property-information": "^6.4.1",
     "pubsub-js": "^1.9.4",
     "react": "18.2.0",
