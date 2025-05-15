@@ -4,6 +4,7 @@ import { clearBadge, streamDownload } from "@/utils/pull-ollama"
 import { Storage } from "@plasmohq/storage"
 import { getInitialConfig } from "@/services/action"
 import { saveCurrentPage } from "@/services/saved-pages"
+import { syncService } from "@/services/sync/sync-service"
 
 export default defineBackground({
   main() {
@@ -157,6 +158,19 @@ export default defineBackground({
         }
 
         console.log("所有上下文菜单项创建完成");
+        
+        // 初始化同步服务
+        try {
+          console.log("正在初始化数据同步服务...");
+          
+          // 尝试访问同步服务，这会触发其构造函数中的初始化过程
+          const currentStatus = syncService.getStatus();
+          console.log(`数据同步服务初始化完成，当前状态: ${currentStatus}`);
+        } catch (syncError) {
+          // 确保同步服务初始化失败不会影响扩展的其他功能
+          console.error("初始化数据同步服务失败:", syncError);
+        }
+        
       } catch (error) {
         console.error("初始化过程中出错:", error)
       }
@@ -296,43 +310,15 @@ export default defineBackground({
       } else if (info.menuItemId === "save-page-pa") {
         console.log("右键菜单：开始保存当前页面", { tabId: tab?.id, url: tab?.url });
         try {
-          // 显示保存中通知
-          const savingNotificationId = "saving-page-notification";
-          browser.notifications.create(savingNotificationId, {
-            type: "basic",
-            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
-            title: "正在保存页面",
-            message: "正在处理页面内容，请稍候..."
-          });
-
-          // 保存当前页面
+          // 不使用通知，简化逻辑，以避免图标路径问题
           console.log("调用 saveCurrentPage 函数");
           const savedPage = await saveCurrentPage();
           console.log("页面保存成功", savedPage);
           
-          // 清除保存中通知
-          browser.notifications.clear(savingNotificationId);
-          
-          // 显示成功通知
-          browser.notifications.create("save-success-notification", {
-            type: "basic",
-            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
-            title: "页面保存成功",
-            message: `已成功保存页面：${savedPage.title}`
-          });
+          // 显示消息在控制台
+          console.log(`已成功保存页面：${savedPage.title}`);
         } catch (error) {
           console.error("保存页面失败", error);
-          
-          // 清除保存中通知
-          browser.notifications.clear(savingNotificationId);
-          
-          // 显示错误通知
-          browser.notifications.create("save-error-notification", {
-            type: "basic",
-            iconUrl: browser.runtime.getURL("assets/icon-128.png"),
-            title: "保存页面失败",
-            message: error instanceof Error ? error.message : String(error)
-          });
         }
       } else if (info.menuItemId === "view-saved-pages-pa") {
         console.log("右键菜单：查看已保存的网页");

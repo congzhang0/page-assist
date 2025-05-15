@@ -4,6 +4,7 @@ import {
   getOpenAIConfigById as providerInfo
 } from "./openai"
 import { getAllModelNicknames } from "./nickname"
+import { syncHooks } from "./sync-hooks"
 
 type Model = {
   id: string
@@ -154,6 +155,7 @@ export class ModelDb {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          syncHooks.model.afterCreate(model);
           resolve()
         }
       })
@@ -178,6 +180,7 @@ export class ModelDb {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          syncHooks.model.afterUpdate(model);
           resolve()
         }
       })
@@ -190,6 +193,7 @@ export class ModelDb {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          syncHooks.model.afterDelete(id);
           resolve()
         }
       })

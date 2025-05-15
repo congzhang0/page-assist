@@ -1,3 +1,5 @@
+import { syncHooks } from "./sync-hooks"
+
 interface PageAssistVector {
   file_id: string
   content: string
@@ -28,25 +30,31 @@ export class PageAssistVectorDb {
         } else {
           const data = result[id] as VectorData
           if (!data) {
-            this.db.set({ [id]: { id, vectors: vector } }, () => {
+            const newData = { id, vectors: vector };
+            this.db.set({ [id]: newData }, () => {
               if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError)
               } else {
+                // 触发同步钩子
+                syncHooks.vector.afterCreate(newData);
                 resolve()
               }
             })
           } else {
+            const updatedData = {
+              ...data,
+              vectors: data.vectors.concat(vector)
+            };
             this.db.set(
               {
-                [id]: {
-                  ...data,
-                  vectors: data.vectors.concat(vector)
-                }
+                [id]: updatedData
               },
               () => {
                 if (chrome.runtime.lastError) {
                   reject(chrome.runtime.lastError)
                 } else {
+                  // 触发同步钩子
+                  syncHooks.vector.afterUpdate(updatedData);
                   resolve()
                 }
               }
@@ -63,6 +71,8 @@ export class PageAssistVectorDb {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          // 触发同步钩子
+          syncHooks.vector.afterDelete(id);
           resolve()
         }
       })
@@ -81,6 +91,8 @@ export class PageAssistVectorDb {
             if (chrome.runtime.lastError) {
               reject(chrome.runtime.lastError)
             } else {
+              // 触发同步钩子
+              syncHooks.vector.afterUpdate(data);
               resolve()
             }
           })
@@ -123,6 +135,10 @@ export class PageAssistVectorDb {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError)
         } else {
+          // 触发同步钩子 - 对每个导入的向量触发创建事件
+          data.forEach(vector => {
+            syncHooks.vector.afterCreate(vector);
+          });
           resolve()
         }
       })
