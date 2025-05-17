@@ -339,9 +339,17 @@ export default defineBackground({
       } else if (info.menuItemId === "view-saved-pages-pa") {
         console.log("右键菜单：查看已保存的网页");
         // 打开选项页面并导航到已保存页面的标签
+        // 使用查询参数而不是hash，确保路由正确加载
         browser.tabs.create({
-          url: browser.runtime.getURL("/options.html#/settings/saved-pages")
+          url: browser.runtime.getURL("/options.html?route=/settings/saved-pages")
         });
+        // 发送消息通知选项页面需要导航到已保存页面
+        setTimeout(() => {
+          browser.runtime.sendMessage({
+            type: "navigate_to_saved_pages",
+            from: "background"
+          });
+        }, 500);
       }
     })
 

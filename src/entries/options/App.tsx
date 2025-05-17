@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { MemoryRouter } from "react-router-dom"
+import { MemoryRouter, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
 const queryClient = new QueryClient()
 import { ConfigProvider, Empty, theme } from "antd"
@@ -10,6 +10,37 @@ import "~/i18n"
 import { useTranslation } from "react-i18next"
 import { PageAssistProvider } from "@/components/Common/PageAssistProvider"
 import { FontSizeProvider } from "@/context/FontSizeProvider"
+import { browser } from "wxt/browser"
+
+// 路由导航组件，用于处理导航消息
+function NavigationHandler() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // 获取URL中的route参数
+    const urlParams = new URLSearchParams(window.location.search);
+    const routeParam = urlParams.get('route');
+    if (routeParam) {
+      console.log('从URL参数导航到:', routeParam);
+      navigate(routeParam);
+    }
+
+    // 监听来自background的导航消息
+    const messageListener = (message) => {
+      if (message.type === 'navigate_to_saved_pages' && message.from === 'background') {
+        console.log('收到导航消息，正在导航到已保存页面');
+        navigate('/settings/saved-pages');
+      }
+    };
+
+    browser.runtime.onMessage.addListener(messageListener);
+    return () => {
+      browser.runtime.onMessage.removeListener(messageListener);
+    };
+  }, [navigate]);
+
+  return null;
+}
 
 function IndexOption() {
   const { mode } = useDarkMode()
@@ -47,6 +78,7 @@ function IndexOption() {
           <QueryClientProvider client={queryClient}>
             <PageAssistProvider>
               <FontSizeProvider>
+                <NavigationHandler />
                 <OptionRouting />
               </FontSizeProvider>
             </PageAssistProvider>
