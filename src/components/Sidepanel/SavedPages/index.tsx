@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message } from "antd";
-import { DeleteOutlined, EditOutlined, EyeOutlined, SearchOutlined, TagOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, EyeOutlined, SearchOutlined, TagOutlined, ReloadOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 
@@ -164,14 +164,24 @@ export const SidepanelSavedPages: React.FC = () => {
   return (
     <div className="p-2">
       <div className="mb-3">
-        <Input.Search
-          placeholder="搜索标题或内容"
-          allowClear
-          enterButton={<SearchOutlined />}
-          onSearch={handleSearch}
-          className="mb-2"
-          size="small"
-        />
+        <div className="flex items-center mb-2">
+          <Input.Search
+            placeholder="搜索标题或内容"
+            allowClear
+            enterButton={<SearchOutlined />}
+            onSearch={handleSearch}
+            className="flex-1"
+            size="small"
+          />
+          <Tooltip title="刷新">
+            <Button
+              icon={<ReloadOutlined />}
+              size="small"
+              className="ml-1"
+              onClick={() => loadPages()}
+            />
+          </Tooltip>
+        </div>
 
         <div className="mt-2 max-h-20 overflow-y-auto">
           <span className="mr-2 text-xs">标签筛选:</span>

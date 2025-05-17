@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
@@ -257,13 +257,24 @@ const OptionSettingsSavedPages: React.FC = () => {
       </div>
 
       <div className="mb-4">
-        <Input.Search
-          placeholder="搜索标题或内容"
-          allowClear
-          enterButton={<SearchOutlined />}
-          onSearch={handleSearch}
-          className="mb-2"
-        />
+        <div className="flex items-center mb-2">
+          <Input.Search
+            placeholder="搜索标题或内容"
+            allowClear
+            enterButton={<SearchOutlined />}
+            onSearch={handleSearch}
+            className="flex-1"
+          />
+          <Tooltip title="刷新">
+            <Button
+              icon={<ReloadOutlined />}
+              className="ml-2"
+              onClick={() => loadPages()}
+            >
+              刷新
+            </Button>
+          </Tooltip>
+        </div>
 
         <div className="mt-2">
           <span className="mr-2">标签筛选:</span>
