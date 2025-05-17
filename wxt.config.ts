@@ -118,6 +118,15 @@ export default defineConfig({
     permissions:
       process.env.TARGET === "firefox"
         ? firefoxMV2Permissions
-        : chromeMV3Permissions
+        : chromeMV3Permissions,
+    web_accessible_resources:
+      process.env.TARGET !== "firefox"
+        ? [
+            {
+              resources: ["pages/debug.html", "scripts/debug.js"],
+              matches: ["<all_urls>"]
+            }
+          ]
+        : ["pages/debug.html", "scripts/debug.js"]
   }
 }) as any
