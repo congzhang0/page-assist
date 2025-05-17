@@ -38,6 +38,19 @@ export const showStatusNotification = (
 };
 
 /**
+ * 显示保存进度通知
+ * @param stage 保存阶段
+ * @param message 阶段消息
+ */
+export const showSaveProgress = (stage: string, message: string): void => {
+  showStatusNotification(
+    `保存页面 - ${stage}`,
+    message,
+    StatusType.INFO
+  );
+};
+
+/**
  * 显示保存成功通知
  * @param title 保存的页面标题
  */
@@ -65,5 +78,6 @@ export default {
   showStatusNotification,
   showSaveSuccess,
   showSaveError,
+  showSaveProgress,
   StatusType
 };

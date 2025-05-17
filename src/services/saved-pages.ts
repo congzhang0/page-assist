@@ -16,30 +16,67 @@ import { browser } from "wxt/browser";
  */
 import logger from '@/utils/logger';
 
+import { setBadgeText, setBadgeBackgroundColor } from "@/utils/action";
+import statusIndicator from "@/utils/status-indicator";
+
+/**
+ * 更新扩展图标状态，显示保存进度
+ * @param status 状态文本
+ * @param color 状态颜色
+ * @param stage 保存阶段
+ * @param message 阶段消息
+ */
+const updateSaveStatus = (status: string, color: string, stage?: string, message?: string) => {
+  // 更新扩展图标状态
+  setBadgeText({ text: status });
+  setBadgeBackgroundColor({ color });
+  
+  // 如果提供了阶段和消息，显示通知
+  if (stage && message) {
+    statusIndicator.showSaveProgress(stage, message);
+  }
+  
+  // 如果状态是完成或错误，5秒后清除状态
+  if (status === "✓" || status === "✗") {
+    setTimeout(() => {
+      setBadgeText({ text: "" });
+    }, 5000);
+  }
+};
+
 export const saveCurrentPage = async (params?: {
   tags?: string[];
   notes?: string;
 }): Promise<SavedPage> => {
   logger.info('开始保存当前页面', params);
+  
+  // 显示开始保存状态
+   updateSaveStatus("...", "#3498db", "准备中", "正在初始化保存过程..."); // 蓝色表示进行中
 
-  try {
-    // 获取当前页面内容
-    logger.debug('正在获取页面内容');
+   try {
+     // 获取当前页面内容
+     logger.debug('正在获取页面内容');
+     updateSaveStatus("1/3", "#3498db", "第1步", "正在获取页面内容..."); // 第一阶段：获取内容
+    
     const pageDataResult = await getDataFromCurrentTab().catch(err => {
       logger.error('获取页面内容失败', err);
+       updateSaveStatus("✗", "#e74c3c", "错误", `获取页面内容失败: ${err.message || '未知错误'}`); // 红色表示错误
       throw new Error(`获取页面内容失败: ${err.message || '未知错误'}`);
     });
 
     if (!pageDataResult) {
-      logger.error('获取页面内容返回空结果');
-      throw new Error('获取页面内容返回空结果');
+        logger.error('获取页面内容返回空结果');
+        updateSaveStatus("✗", "#e74c3c", "错误", "获取页面内容返回空结果");
+        throw new Error('获取页面内容返回空结果');
     }
 
     const { url, title, content, type, pdf, favicon } = pageDataResult;
     logger.info('成功获取页面内容', { url, title, contentLength: content?.length, type });
 
     // 获取页面截图
-    logger.debug('正在获取页面截图');
+     logger.debug('正在获取页面截图');
+     updateSaveStatus("2/3", "#3498db", "第2步", "正在获取页面截图..."); // 第二阶段：获取截图
+    
     const screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
       logger.error('获取页面截图失败', err);
       // 截图失败不阻止保存过程，继续执行
@@ -77,10 +114,12 @@ export const saveCurrentPage = async (params?: {
         // 通知background打开侧边栏
         try {
           await browser.runtime.sendMessage({ type: 'open_sidebar_for_model_config' });
-          throw new Error('请先在侧边栏中配置LLM模型，然后再尝试保存页面');
+           updateSaveStatus("✗", "#e74c3c", "错误", "请先在侧边栏中配置LLM模型，然后再尝试保存页面");
+           throw new Error('请先在侧边栏中配置LLM模型，然后再尝试保存页面');
         } catch (msgError) {
           logger.error('发送打开侧边栏消息失败', msgError);
-          throw new Error('未选择LLM模型，请先配置模型后再尝试保存页面');
+           updateSaveStatus("✗", "#e74c3c", "错误", "未选择LLM模型，请先配置模型后再尝试保存页面");
+           throw new Error('未选择LLM模型，请先配置模型后再尝试保存页面');
         }
       }
       logger.warn('生成摘要和关键词失败，将继续保存页面', error);
@@ -105,13 +144,17 @@ export const saveCurrentPage = async (params?: {
     };
 
     // 保存到数据库
-    logger.debug('正在保存页面到数据库', { url, title });
+     logger.debug('正在保存页面到数据库', { url, title });
+     updateSaveStatus("3/3", "#3498db", "第3步", "正在保存页面到数据库..."); // 第三阶段：保存到数据库
+    
     const savedPage = await savedPagesDB.savePage(saveParams).catch(err => {
       logger.error('保存页面到数据库失败', err);
-      throw new Error(`保存页面到数据库失败: ${err.message || '未知错误'}`);
+       updateSaveStatus("✗", "#e74c3c", "错误", `保存页面到数据库失败: ${err.message || '未知错误'}`);
+       throw new Error(`保存页面到数据库失败: ${err.message || '未知错误'}`);
     });
 
     logger.info('页面保存成功', { id: savedPage.id, title: savedPage.title, url: savedPage.url });
+     updateSaveStatus("✓", "#2ecc71", "完成", "页面保存成功！"); // 绿色表示成功
     return savedPage;
   } catch (error) {
     logger.error('保存页面过程中发生错误', error);

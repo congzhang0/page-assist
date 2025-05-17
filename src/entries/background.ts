@@ -316,6 +316,9 @@ export default defineBackground({
       } else if (info.menuItemId === "save-page-pa") {
         console.log("右键菜单：开始保存当前页面", { tabId: tab?.id, url: tab?.url });
         try {
+          // 使用状态指示器显示保存开始进度
+          statusIndicator.showSaveProgress("准备中", "正在初始化保存过程...");
+          
           console.log("调用 saveCurrentPage 函数");
           const savedPage = await saveCurrentPage();
           console.log("页面保存成功", savedPage);
