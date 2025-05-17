@@ -316,6 +316,9 @@ export default defineBackground({
       } else if (info.menuItemId === "save-page-pa") {
         console.log("右键菜单：开始保存当前页面", { tabId: tab?.id, url: tab?.url });
         try {
+          // 使用状态指示器显示保存开始进度
+          statusIndicator.showSaveProgress("准备中", "正在初始化保存过程...");
+          
           console.log("调用 saveCurrentPage 函数");
           const savedPage = await saveCurrentPage();
           console.log("页面保存成功", savedPage);
@@ -336,9 +339,17 @@ export default defineBackground({
       } else if (info.menuItemId === "view-saved-pages-pa") {
         console.log("右键菜单：查看已保存的网页");
         // 打开选项页面并导航到已保存页面的标签
+        // 使用查询参数而不是hash，确保路由正确加载
         browser.tabs.create({
-          url: browser.runtime.getURL("/options.html#/settings/saved-pages")
+          url: browser.runtime.getURL("/options.html?route=/settings/saved-pages")
         });
+        // 发送消息通知选项页面需要导航到已保存页面
+        setTimeout(() => {
+          browser.runtime.sendMessage({
+            type: "navigate_to_saved_pages",
+            from: "background"
+          });
+        }, 500);
       }
     })
 
