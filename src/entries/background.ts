@@ -143,7 +143,7 @@ export default defineBackground({
         try {
           browser.contextMenus.create({
             id: "save-page-pa",
-            title: "保存当前页面",
+            title: browser.i18n.getMessage("saveCurrentPage"),
             contexts: ["page"]
           });
           console.log("已创建保存页面菜单项");
@@ -155,7 +155,7 @@ export default defineBackground({
         try {
           browser.contextMenus.create({
             id: "view-saved-pages-pa",
-            title: "查看已保存的网页",
+            title: browser.i18n.getMessage("viewSavedPages"),
             contexts: ["page"]
           });
           console.log("已创建查看已保存网页菜单项");

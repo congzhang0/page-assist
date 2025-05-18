@@ -1,5 +1,7 @@
 {
   "title": "Saved Pages",
+  "saveCurrentPage": "Save Current Page",
+  "viewSavedPages": "View Saved Pages",
   "search": {
     "placeholder": "Search title or content"
   },

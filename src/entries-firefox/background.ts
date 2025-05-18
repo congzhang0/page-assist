@@ -79,7 +79,14 @@ export default defineBackground({
         // 添加保存当前页面的菜单项
         browser.contextMenus.create({
           id: "save-page-pa",
-          title: "保存当前页面",
+          title: browser.i18n.getMessage("saveCurrentPage"),
+          contexts: ["page"]
+        })
+        
+        // 添加查看已保存网页的菜单项
+        browser.contextMenus.create({
+          id: "view-saved-pages-pa",
+          title: browser.i18n.getMessage("viewSavedPages"),
           contexts: ["page"]
         })
 

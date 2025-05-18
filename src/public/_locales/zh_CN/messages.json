@@ -22,5 +22,11 @@
     },
     "contextCustom": {
         "message": "自定义"
+    },
+    "saveCurrentPage": {
+        "message": "保存当前页面"
+    },
+    "viewSavedPages": {
+        "message": "查看已保存的网页"
     }
 }
