@@ -3,8 +3,8 @@
  * 提供保存当前页面到数据库的功能
  */
 
-import { getDataFromCurrentTab } from "@/libs/get-html";
-import { getScreenshotFromCurrentTab } from "@/libs/get-screenshot";
+import { getDataFromCurrentTab, getDataFromSpecificTab } from "@/libs/get-html";
+import { getScreenshotFromCurrentTab, getScreenshotFromSpecificTab } from "@/libs/get-screenshot";
 import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/saved-pages";
 import { generateSummary } from "@/services/llm-service";
 import { browser } from "wxt/browser";
@@ -67,9 +67,16 @@ const updateSaveStatus = (status: string, color: string, stage?: string, message
   }
 };
 
+/**
+ * 保存页面到数据库
+ * @param params 保存参数，可以包含标签、备注和标签页ID
+ * @returns 保存的页面信息
+ */
 export const saveCurrentPage = async (params?: {
   tags?: string[];
   notes?: string;
+  title?: string; // 可选的标题，用于自动保存时传递
+  tabId?: number; // 可选的标签页ID，用于自动保存时指定标签页
 }): Promise<SavedPage> => {
   logger.info('开始保存当前页面', params);
 
@@ -77,15 +84,26 @@ export const saveCurrentPage = async (params?: {
    updateSaveStatus("...", "#3498db", "准备中", "正在初始化保存过程..."); // 蓝色表示进行中
 
    try {
-     // 获取当前页面内容
-     logger.debug('正在获取页面内容');
+     // 获取页面内容
+     logger.debug('正在获取页面内容', params?.tabId ? { tabId: params.tabId } : {});
      updateSaveStatus("1/3", "#3498db", "第1步", "正在获取页面内容..."); // 第一阶段：获取内容
 
-    const pageDataResult = await getDataFromCurrentTab().catch(err => {
-      logger.error('获取页面内容失败', err);
-       updateSaveStatus("✗", "#e74c3c", "错误", `获取页面内容失败: ${err.message || '未知错误'}`); // 红色表示错误
-      throw new Error(`获取页面内容失败: ${err.message || '未知错误'}`);
-    });
+    let pageDataResult;
+    if (params?.tabId) {
+      // 如果提供了 tabId，使用 getDataFromSpecificTab
+      pageDataResult = await getDataFromSpecificTab(params.tabId).catch(err => {
+        logger.error('获取指定标签页内容失败', { tabId: params.tabId, error: err });
+        updateSaveStatus("✗", "#e74c3c", "错误", `获取页面内容失败: ${err.message || '未知错误'}`);
+        throw new Error(`获取页面内容失败: ${err.message || '未知错误'}`);
+      });
+    } else {
+      // 否则使用原来的 getDataFromCurrentTab
+      pageDataResult = await getDataFromCurrentTab().catch(err => {
+        logger.error('获取页面内容失败', err);
+        updateSaveStatus("✗", "#e74c3c", "错误", `获取页面内容失败: ${err.message || '未知错误'}`);
+        throw new Error(`获取页面内容失败: ${err.message || '未知错误'}`);
+      });
+    }
 
     if (!pageDataResult) {
         logger.error('获取页面内容返回空结果');
@@ -97,31 +115,59 @@ export const saveCurrentPage = async (params?: {
     logger.info('成功获取页面内容', { url, title, contentLength: content?.length, type });
 
     // 获取页面截图
-     logger.debug('正在获取页面截图');
+     logger.debug('正在获取页面截图', params?.tabId ? { tabId: params.tabId } : {});
      updateSaveStatus("2/3", "#3498db", "第2步", "正在获取页面截图..."); // 第二阶段：获取截图
 
-    const screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
-      // 检查是否是配额限制错误
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
+    let screenshotResult;
+    if (params?.tabId) {
+      // 如果提供了 tabId，使用 getScreenshotFromSpecificTab
+      screenshotResult = await getScreenshotFromSpecificTab(params.tabId).catch(err => {
+        // 检查是否是配额限制错误
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
 
-      if (isQuotaError) {
-        logger.warn('截图请求超过配额限制，已加入队列处理', { error: errorMessage });
-        updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
+        if (isQuotaError) {
+          logger.warn('截图请求超过配额限制，已加入队列处理', { tabId: params.tabId, error: errorMessage });
+          updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
 
-        // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
-        return {
-          success: false,
-          screenshot: undefined,
-          error: errorMessage,
-          isQuotaError: true
-        };
-      } else {
-        logger.error('获取页面截图失败', err);
-        // 其他截图失败不阻止保存过程，继续执行
-        return { success: false, screenshot: undefined, error: errorMessage };
-      }
-    });
+          // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
+          return {
+            success: false,
+            screenshot: undefined,
+            error: errorMessage,
+            isQuotaError: true
+          };
+        } else {
+          logger.error('获取页面截图失败', { tabId: params.tabId, error: err });
+          // 其他截图失败不阻止保存过程，继续执行
+          return { success: false, screenshot: undefined, error: errorMessage };
+        }
+      });
+    } else {
+      // 否则使用原来的 getScreenshotFromCurrentTab
+      screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
+        // 检查是否是配额限制错误
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
+
+        if (isQuotaError) {
+          logger.warn('截图请求超过配额限制，已加入队列处理', { error: errorMessage });
+          updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
+
+          // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
+          return {
+            success: false,
+            screenshot: undefined,
+            error: errorMessage,
+            isQuotaError: true
+          };
+        } else {
+          logger.error('获取页面截图失败', err);
+          // 其他截图失败不阻止保存过程，继续执行
+          return { success: false, screenshot: undefined, error: errorMessage };
+        }
+      });
+    }
 
     const { success, screenshot, error: screenshotError, isQuotaError } = screenshotResult;
 

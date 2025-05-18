@@ -358,7 +358,8 @@ export const autoSavePage = async (tabId: number): Promise<void> => {
     await saveCurrentPage({
       tags: ['auto-save'],
       notes: '自动保存的页面',
-      title: title // 确保保存标题
+      title: title, // 确保保存标题
+      tabId: tabId  // 传递标签页ID，确保能够获取正确的页面内容
     });
 
     logger.info('自动保存页面成功:', url);
@@ -572,7 +573,8 @@ export const saveAllOpenTabs = async (): Promise<{
         // 保存页面
         await saveCurrentPage({
           tags: ['manual-save', 'batch-save'],
-          notes: '批量保存的页面'
+          notes: '批量保存的页面',
+          tabId: tab.id! // 传递标签页ID，确保能够获取正确的页面内容
         });
 
         savedCount++;
