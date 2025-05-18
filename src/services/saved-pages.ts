@@ -16,7 +16,7 @@ import { browser } from "wxt/browser";
  */
 import logger from '@/utils/logger';
 
-import { setBadgeText, setBadgeBackgroundColor } from "@/utils/action";
+import { setBadgeText, setBadgeBackgroundColor, setBadgeTextColor, setTitle } from "@/utils/action";
 import statusIndicator from "@/utils/status-indicator";
 
 /**
@@ -31,15 +31,38 @@ const updateSaveStatus = (status: string, color: string, stage?: string, message
   setBadgeText({ text: status });
   setBadgeBackgroundColor({ color });
 
+  // 设置徽章文本颜色为白色，增加可读性
+  setBadgeTextColor({ color: "#FFFFFF" });
+
+  // 设置图标标题，显示详细进度信息
+  let titleText = message || "";
+  if (stage) {
+    titleText = `${stage}: ${titleText}`;
+  }
+  setTitle({ title: titleText });
+
   // 如果提供了阶段和消息，显示通知
   if (stage && message) {
-    statusIndicator.showSaveProgress(stage, message);
+    // 使用更详细的进度信息
+    let progressInfo = message;
+
+    // 如果状态是数字格式（如"1/3"），添加百分比信息
+    if (status.includes("/")) {
+      const [current, total] = status.split("/").map(Number);
+      if (!isNaN(current) && !isNaN(total) && total > 0) {
+        const percentage = Math.round((current / total) * 100);
+        progressInfo = `${progressInfo} (${percentage}%)`;
+      }
+    }
+
+    statusIndicator.showSaveProgress(stage, progressInfo);
   }
 
   // 如果状态是完成或错误，5秒后清除状态
   if (status === "✓" || status === "✗") {
     setTimeout(() => {
       setBadgeText({ text: "" });
+      setTitle({ title: "" });
     }, 5000);
   }
 };

@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography, Tabs } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
 import { SettingsLayout } from "@/components/Layouts/SettingsOptionLayout";
 import AutoSaveSettings from "@/components/Option/SavedPages/AutoSaveSettings";
+import DownloadQueue from "@/components/Option/SavedPages/DownloadQueue";
 
 const PAGE_SIZE = 10;
 
@@ -248,8 +249,8 @@ const SavedPagesContent: React.FC = () => {
   return (
     <div className="p-4">
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        <TabPane 
-          tab={<span><EyeOutlined /> {t("savedPages.tabs.savedPages", "已保存的页面")}</span>} 
+        <TabPane
+          tab={<span><EyeOutlined /> {t("savedPages.tabs.savedPages", "已保存的页面")}</span>}
           key="1"
         >
           <div className="mb-4 flex justify-between items-center">
@@ -372,11 +373,17 @@ const SavedPagesContent: React.FC = () => {
             />
           </div>
         </TabPane>
-        <TabPane 
-          tab={<span><SettingOutlined /> {t("savedPages.tabs.autoSaveSettings", "自动保存设置")}</span>} 
+        <TabPane
+          tab={<span><SettingOutlined /> {t("savedPages.tabs.autoSaveSettings", "自动保存设置")}</span>}
           key="2"
         >
           <AutoSaveSettings />
+        </TabPane>
+        <TabPane
+          tab={<span><DownloadOutlined /> {t("savedPages.tabs.downloadQueue", "下载队列")}</span>}
+          key="3"
+        >
+          <DownloadQueue />
         </TabPane>
       </Tabs>
 
