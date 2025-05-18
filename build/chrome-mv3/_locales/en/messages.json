@@ -31,5 +31,11 @@
     },
     "viewSavedPages": {
         "message": "View Saved Pages"
+    },
+    "autoSaveEnabled": {
+        "message": "Auto Save Enabled"
+    },
+    "autoSaveSettings": {
+        "message": "Auto Save Settings"
     }
 }

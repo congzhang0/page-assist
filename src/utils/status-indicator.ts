@@ -27,7 +27,7 @@ export const showStatusNotification = (
 ): void => {
   // 根据类型选择图标
   let iconPath = 'assets/icon-128.png';
-  
+
   // 创建通知
   browser.notifications.create({
     type: 'basic',
@@ -74,10 +74,25 @@ export const showSaveError = (error: string): void => {
   );
 };
 
+/**
+ * 显示一般通知
+ * @param title 通知标题
+ * @param message 通知消息
+ * @param type 通知类型
+ */
+export const showNotification = (
+  title: string,
+  message: string,
+  type: StatusType = StatusType.INFO
+): void => {
+  showStatusNotification(title, message, type);
+};
+
 export default {
   showStatusNotification,
   showSaveSuccess,
   showSaveError,
   showSaveProgress,
+  showNotification,
   StatusType
 };

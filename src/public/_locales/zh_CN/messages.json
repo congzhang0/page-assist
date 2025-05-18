@@ -28,5 +28,11 @@
     },
     "viewSavedPages": {
         "message": "查看已保存的网页"
+    },
+    "autoSaveEnabled": {
+        "message": "自动保存已启用"
+    },
+    "autoSaveSettings": {
+        "message": "自动保存设置"
     }
 }

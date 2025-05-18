@@ -8,6 +8,9 @@ import { syncService } from "@/services/sync/sync-service"
 import { initDebugCommands } from "@/utils/debug-commands"
 import statusIndicator from "@/utils/status-indicator"
 import storageViewer from "@/utils/storage-viewer"
+import { initAutoSave } from "@/services/auto-save"
+import { screenshotThrottler } from "@/services/screenshot-throttler"
+import logger from '@/utils/logger'
 
 export default defineBackground({
   main() {
@@ -24,6 +27,12 @@ export default defineBackground({
 
     // 初始化调试命令
     initDebugCommands()
+
+    // 初始化自动保存功能
+    initAutoSave()
+
+    // 记录截图节流管理器已初始化
+    logger.info('截图节流管理器已初始化，将限制截图请求频率以避免超过浏览器配额限制')
     const initialize = async () => {
       try {
         // 先移除所有现有的上下文菜单项，避免重复ID错误
@@ -318,7 +327,7 @@ export default defineBackground({
         try {
           // 使用状态指示器显示保存开始进度
           statusIndicator.showSaveProgress("准备中", "正在初始化保存过程...");
-          
+
           console.log("调用 saveCurrentPage 函数");
           const savedPage = await saveCurrentPage();
           console.log("页面保存成功", savedPage);
