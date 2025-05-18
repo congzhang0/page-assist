@@ -5,10 +5,11 @@ import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlin
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
+import { SettingsLayout } from "@/components/Layouts/SettingsOptionLayout";
 
 const PAGE_SIZE = 10;
 
-const OptionSettingsSavedPages: React.FC = () => {
+const SavedPagesContent: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -491,6 +492,14 @@ const OptionSettingsSavedPages: React.FC = () => {
         )}
       </Modal>
     </div>
+  );
+};
+
+const OptionSettingsSavedPages: React.FC = () => {
+  return (
+    <SettingsLayout>
+      <SavedPagesContent />
+    </SettingsLayout>
   );
 };
 
