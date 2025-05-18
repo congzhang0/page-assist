@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Switch, Input, Button, List, Tag, Tooltip, InputNumber, Form, Space, Divider, Typography, message } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, ClockCircleOutlined, GlobalOutlined, SaveOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { Card, Switch, Input, Button, List, Tag, Tooltip, InputNumber, Form, Space, Divider, Typography, message, Modal, Alert } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, ClockCircleOutlined, GlobalOutlined, SaveOutlined, AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { Storage } from '@plasmohq/storage';
-import { saveAllOpenTabs } from '@/services/auto-save';
+import { saveAllOpenTabs, isUrlMatchPattern, shouldAutoSaveUrl } from '@/services/auto-save';
 
 const { Title, Text } = Typography;
 
@@ -13,6 +13,7 @@ export interface AutoSaveSettings {
   websites: WebsiteRule[];
   saveDelay: number; // 单位：分钟
   maxPages: number; // 最大保存页面数量
+  paused: boolean; // 是否暂停自动保存（临时停止但保留设置）
 }
 
 // 网站规则类型定义
@@ -37,7 +38,8 @@ const DEFAULT_SETTINGS: AutoSaveSettings = {
     { id: generateID(), pattern: '*', enabled: true }
   ],
   saveDelay: 1,
-  maxPages: 100 // 默认最大保存100个页面
+  maxPages: 100, // 默认最大保存100个页面
+  paused: false // 默认不暂停
 };
 
 // 存储键名
@@ -50,6 +52,14 @@ const AutoSaveSettings: React.FC = () => {
   const [newWebsite, setNewWebsite] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [testModalVisible, setTestModalVisible] = useState(false);
+  const [testUrl, setTestUrl] = useState('');
+  const [testResults, setTestResults] = useState<{
+    url: string;
+    willSave: boolean;
+    matchedRules: string[];
+    excludedByRules: string[];
+  } | null>(null);
   const storage = new Storage({ area: 'local' });
 
   // 加载设置
@@ -81,6 +91,12 @@ const AutoSaveSettings: React.FC = () => {
   // 切换自动保存功能
   const handleToggleAutoSave = (checked: boolean) => {
     const newSettings = { ...settings, enabled: checked };
+    saveSettings(newSettings);
+  };
+
+  // 切换暂停/恢复状态
+  const handleTogglePause = (checked: boolean) => {
+    const newSettings = { ...settings, paused: checked };
     saveSettings(newSettings);
   };
 
@@ -190,6 +206,77 @@ const AutoSaveSettings: React.FC = () => {
     }
   };
 
+  // 打开规则测试模态框
+  const handleOpenTestModal = () => {
+    setTestUrl('');
+    setTestResults(null);
+    setTestModalVisible(true);
+  };
+
+  // 关闭规则测试模态框
+  const handleCloseTestModal = () => {
+    setTestModalVisible(false);
+  };
+
+  // 测试URL是否匹配规则
+  const handleTestUrl = async () => {
+    if (!testUrl.trim()) {
+      message.error('请输入要测试的URL');
+      return;
+    }
+
+    try {
+      // 验证URL格式
+      let url = testUrl.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      // 尝试解析URL
+      try {
+        new URL(url);
+      } catch (e) {
+        message.error('无效的URL格式');
+        return;
+      }
+
+      // 获取所有启用的规则
+      const enabledRules = settings.websites.filter(rule => rule.enabled);
+
+      // 检查是否会被排除规则排除
+      const excludedByRules: string[] = [];
+      for (const rule of enabledRules) {
+        if (rule.pattern.startsWith('!') && isUrlMatchPattern(url, rule.pattern.substring(1))) {
+          excludedByRules.push(rule.pattern);
+        }
+      }
+
+      // 检查是否匹配包含规则
+      const matchedRules: string[] = [];
+      for (const rule of enabledRules) {
+        if (!rule.pattern.startsWith('!')) {
+          if (isUrlMatchPattern(url, rule.pattern)) {
+            matchedRules.push(rule.pattern);
+          }
+        }
+      }
+
+      // 检查是否会被自动保存
+      const willSave = await shouldAutoSaveUrl(url, settings);
+
+      // 设置测试结果
+      setTestResults({
+        url,
+        willSave,
+        matchedRules,
+        excludedByRules
+      });
+
+    } catch (error) {
+      message.error(`测试URL失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   return (
     <Card title={<Title level={4}>自动保存设置</Title>} className="mb-4">
       <Form layout="vertical">
@@ -197,13 +284,37 @@ const AutoSaveSettings: React.FC = () => {
           label="启用自动保存"
           tooltip="启用后，系统将根据下方规则自动保存您浏览的网页"
         >
-          <Switch
-            checked={settings.enabled}
-            onChange={handleToggleAutoSave}
-            checkedChildren="开启"
-            unCheckedChildren="关闭"
-          />
+          <Space>
+            <Switch
+              checked={settings.enabled}
+              onChange={handleToggleAutoSave}
+              checkedChildren="开启"
+              unCheckedChildren="关闭"
+            />
+            {settings.enabled && (
+              <Tooltip title={settings.paused ? "恢复自动保存" : "暂停自动保存"}>
+                <Button
+                  type={settings.paused ? "primary" : "default"}
+                  danger={!settings.paused}
+                  onClick={() => handleTogglePause(!settings.paused)}
+                >
+                  {settings.paused ? "恢复自动保存" : "暂停自动保存"}
+                </Button>
+              </Tooltip>
+            )}
+          </Space>
         </Form.Item>
+
+        {settings.enabled && (
+          <Form.Item>
+            <div className="flex items-center">
+              <div className={`w-3 h-3 rounded-full mr-2 ${settings.paused ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+              <Text type={settings.paused ? "warning" : "success"}>
+                {settings.paused ? "自动保存当前已暂停，设置仍然保留" : "自动保存当前处于活动状态"}
+              </Text>
+            </div>
+          </Form.Item>
+        )}
 
         <Form.Item
           label="保存延迟时间"
@@ -262,9 +373,21 @@ const AutoSaveSettings: React.FC = () => {
 
         <Divider orientation="left">网站规则</Divider>
 
+        <div className="mb-4 flex justify-between items-center">
+          <Text>配置自动保存的网站规则，支持通配符和排除规则</Text>
+          <Button
+            type="primary"
+            icon={<ExperimentOutlined />}
+            onClick={handleOpenTestModal}
+            disabled={!settings.enabled}
+          >
+            测试URL匹配
+          </Button>
+        </div>
+
         <Form.Item
           label="添加网站规则"
-          tooltip="支持通配符，例如: *.example.com 或 example.com/*"
+          tooltip="支持通配符，例如: *.example.com 或 example.com/*，使用!开头表示排除规则"
         >
           <Space.Compact style={{ width: '100%' }}>
             <Input
@@ -351,6 +474,93 @@ const AutoSaveSettings: React.FC = () => {
           </Text>
         </div>
       </Form>
+
+      {/* 规则测试模态框 */}
+      <Modal
+        title="测试URL匹配规则"
+        open={testModalVisible}
+        onCancel={handleCloseTestModal}
+        footer={[
+          <Button key="close" onClick={handleCloseTestModal}>
+            关闭
+          </Button>,
+          <Button key="test" type="primary" onClick={handleTestUrl}>
+            测试
+          </Button>
+        ]}
+      >
+        <div className="mb-4">
+          <Text>输入URL测试是否匹配当前规则</Text>
+        </div>
+        <Input
+          placeholder="输入要测试的URL，例如: https://www.example.com"
+          value={testUrl}
+          onChange={e => setTestUrl(e.target.value)}
+          onPressEnter={handleTestUrl}
+          className="mb-4"
+        />
+
+        {testResults && (
+          <div className="mt-4">
+            <Divider>测试结果</Divider>
+
+            <div className="mb-2">
+              <Text strong>测试URL: </Text>
+              <Text>{testResults.url}</Text>
+            </div>
+
+            <div className="mb-4">
+              <Alert
+                type={testResults.willSave ? "success" : "error"}
+                message={
+                  <div className="flex items-center">
+                    {testResults.willSave ? (
+                      <>
+                        <CheckCircleOutlined className="mr-2 text-green-500" />
+                        <Text strong>此URL将会被自动保存</Text>
+                      </>
+                    ) : (
+                      <>
+                        <CloseCircleOutlined className="mr-2 text-red-500" />
+                        <Text strong>此URL不会被自动保存</Text>
+                      </>
+                    )}
+                  </div>
+                }
+                showIcon={false}
+              />
+            </div>
+
+            {testResults.matchedRules.length > 0 && (
+              <div className="mb-2">
+                <Text strong>匹配的规则:</Text>
+                <div className="mt-1">
+                  {testResults.matchedRules.map(rule => (
+                    <Tag key={rule} color="green" className="mb-1">{rule}</Tag>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {testResults.excludedByRules.length > 0 && (
+              <div className="mb-2">
+                <Text strong>被排除的规则:</Text>
+                <div className="mt-1">
+                  {testResults.excludedByRules.map(rule => (
+                    <Tag key={rule} color="red" className="mb-1">{rule}</Tag>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {testResults.matchedRules.length === 0 && testResults.excludedByRules.length === 0 && (
+              <div className="mb-2">
+                <Text type="secondary">此URL不匹配任何规则</Text>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 };
