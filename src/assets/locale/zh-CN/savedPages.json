@@ -1,0 +1,11 @@
+{
+    "title": "已保存的网页",
+    "empty": "没有已保存的网页",
+    "search": "搜索已保存的网页",
+    "delete": "删除",
+    "deleteConfirm": "确定要删除这个已保存的网页吗？",
+    "deleteSuccess": "已成功删除网页",
+    "view": "查看",
+    "saveCurrentPage": "保存当前页面",
+    "viewSavedPages": "查看已保存的网页"
+}

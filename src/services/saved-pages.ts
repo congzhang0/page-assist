@@ -30,12 +30,12 @@ const updateSaveStatus = (status: string, color: string, stage?: string, message
   // 更新扩展图标状态
   setBadgeText({ text: status });
   setBadgeBackgroundColor({ color });
-  
+
   // 如果提供了阶段和消息，显示通知
   if (stage && message) {
     statusIndicator.showSaveProgress(stage, message);
   }
-  
+
   // 如果状态是完成或错误，5秒后清除状态
   if (status === "✓" || status === "✗") {
     setTimeout(() => {
@@ -49,7 +49,7 @@ export const saveCurrentPage = async (params?: {
   notes?: string;
 }): Promise<SavedPage> => {
   logger.info('开始保存当前页面', params);
-  
+
   // 显示开始保存状态
    updateSaveStatus("...", "#3498db", "准备中", "正在初始化保存过程..."); // 蓝色表示进行中
 
@@ -57,7 +57,7 @@ export const saveCurrentPage = async (params?: {
      // 获取当前页面内容
      logger.debug('正在获取页面内容');
      updateSaveStatus("1/3", "#3498db", "第1步", "正在获取页面内容..."); // 第一阶段：获取内容
-    
+
     const pageDataResult = await getDataFromCurrentTab().catch(err => {
       logger.error('获取页面内容失败', err);
        updateSaveStatus("✗", "#e74c3c", "错误", `获取页面内容失败: ${err.message || '未知错误'}`); // 红色表示错误
@@ -76,16 +76,43 @@ export const saveCurrentPage = async (params?: {
     // 获取页面截图
      logger.debug('正在获取页面截图');
      updateSaveStatus("2/3", "#3498db", "第2步", "正在获取页面截图..."); // 第二阶段：获取截图
-    
+
     const screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
-      logger.error('获取页面截图失败', err);
-      // 截图失败不阻止保存过程，继续执行
-      return { success: false, screenshot: undefined, error: err };
+      // 检查是否是配额限制错误
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
+
+      if (isQuotaError) {
+        logger.warn('截图请求超过配额限制，已加入队列处理', { error: errorMessage });
+        updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
+
+        // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
+        return {
+          success: false,
+          screenshot: undefined,
+          error: errorMessage,
+          isQuotaError: true
+        };
+      } else {
+        logger.error('获取页面截图失败', err);
+        // 其他截图失败不阻止保存过程，继续执行
+        return { success: false, screenshot: undefined, error: errorMessage };
+      }
     });
 
-    const { success, screenshot, error: screenshotError } = screenshotResult;
+    const { success, screenshot, error: screenshotError, isQuotaError } = screenshotResult;
+
     if (!success) {
-      logger.warn('获取页面截图失败，将继续保存页面', screenshotError);
+      if (isQuotaError) {
+        logger.warn('截图请求已加入队列，但当前保存操作将继续进行', { error: screenshotError });
+        // 对于配额错误，我们显示一个友好的消息
+        statusIndicator.showNotification(
+          "截图请求已加入队列",
+          "由于浏览器限制，截图请求已加入队列。页面将保存，但可能不包含截图。"
+        );
+      } else {
+        logger.warn('获取页面截图失败，将继续保存页面', screenshotError);
+      }
     } else {
       logger.info('成功获取页面截图', { screenshotLength: screenshot?.length });
     }
@@ -146,7 +173,7 @@ export const saveCurrentPage = async (params?: {
     // 保存到数据库
      logger.debug('正在保存页面到数据库', { url, title });
      updateSaveStatus("3/3", "#3498db", "第3步", "正在保存页面到数据库..."); // 第三阶段：保存到数据库
-    
+
     const savedPage = await savedPagesDB.savePage(saveParams).catch(err => {
       logger.error('保存页面到数据库失败', err);
        updateSaveStatus("✗", "#e74c3c", "错误", `保存页面到数据库失败: ${err.message || '未知错误'}`);

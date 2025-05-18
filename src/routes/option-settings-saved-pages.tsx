@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography, Tabs } from "antd";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
 import { SettingsLayout } from "@/components/Layouts/SettingsOptionLayout";
+import AutoSaveSettings from "@/components/Option/SavedPages/AutoSaveSettings";
 
 const PAGE_SIZE = 10;
 
 const SavedPagesContent: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { TabPane } = Tabs;
 
+  const [activeTab, setActiveTab] = useState('1');
   const [pages, setPages] = useState<SavedPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -244,125 +247,138 @@ const SavedPagesContent: React.FC = () => {
 
   return (
     <div className="p-4">
-      <div className="mb-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold">{t("savedPages.title", "已保存的页面")}</h1>
+      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+        <TabPane 
+          tab={<span><EyeOutlined /> {t("savedPages.tabs.savedPages", "已保存的页面")}</span>} 
+          key="1"
+        >
+          <div className="mb-4 flex justify-between items-center">
+            <h1 className="text-xl font-bold">{t("savedPages.title", "已保存的页面")}</h1>
 
-        <Space>
-          <Button icon={<ExportOutlined />} onClick={handleExport}>
-            {t("savedPages.buttons.export", "导出")}
-          </Button>
-          <Button icon={<ImportOutlined />} onClick={handleImport}>
-            {t("savedPages.buttons.import", "导入")}
-          </Button>
-        </Space>
-      </div>
+            <Space>
+              <Button icon={<ExportOutlined />} onClick={handleExport}>
+                {t("savedPages.buttons.export", "导出")}
+              </Button>
+              <Button icon={<ImportOutlined />} onClick={handleImport}>
+                {t("savedPages.buttons.import", "导入")}
+              </Button>
+            </Space>
+          </div>
 
-      <div className="mb-4">
-        <div className="flex items-center mb-2">
-          <Input.Search
-            placeholder={t("savedPages.search.placeholder", "搜索标题或内容")}
-            allowClear
-            enterButton={<SearchOutlined />}
-            onSearch={handleSearch}
-            className="flex-1"
-          />
-          <Tooltip title={t("savedPages.buttons.refresh", "刷新")}>
-            <Button
-              icon={<ReloadOutlined />}
-              className="ml-2"
-              onClick={() => loadPages()}
-            >
-              {t("savedPages.buttons.refresh", "刷新")}
-            </Button>
-          </Tooltip>
-        </div>
-
-        <div className="mt-2">
-          <span className="mr-2">{t("savedPages.tagFilter.label", "标签筛选:")}</span>
-          {allTags.map(tag => (
-            <Tag
-              key={tag}
-              color={selectedTags.includes(tag) ? "blue" : undefined}
-              className="cursor-pointer mb-1"
-              onClick={() => handleTagSelect(tag)}
-            >
-              {tag}
-            </Tag>
-          ))}
-        </div>
-      </div>
-
-      <List
-        loading={loading}
-        dataSource={pages}
-        renderItem={page => (
-          <List.Item
-            key={page.id}
-            actions={[
-              <Tooltip title={t("savedPages.actions.viewOriginal", "查看原页面")}>
-                <Button icon={<EyeOutlined />} onClick={() => handleView(page)} />
-              </Tooltip>,
-              <Tooltip title={t("savedPages.actions.viewHtml", "查看原始HTML")}>
-                <Button icon={<CodeOutlined />} onClick={() => handleViewHtml(page)} />
-              </Tooltip>,
-              <Tooltip title={t("savedPages.actions.viewSummary", "查看摘要详情")}>
-                <Button icon={<FileTextOutlined />} onClick={() => handleViewSummary(page)} />
-              </Tooltip>,
-              <Tooltip title={t("savedPages.actions.edit", "编辑")}>
-                <Button icon={<EditOutlined />} onClick={() => handleEdit(page)} />
-              </Tooltip>,
-              <Tooltip title={t("savedPages.actions.delete", "删除")}>
-                <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(page.id)} />
+          <div className="mb-4">
+            <div className="flex items-center mb-2">
+              <Input.Search
+                placeholder={t("savedPages.search.placeholder", "搜索标题或内容")}
+                allowClear
+                enterButton={<SearchOutlined />}
+                onSearch={handleSearch}
+                className="flex-1"
+              />
+              <Tooltip title={t("savedPages.buttons.refresh", "刷新")}>
+                <Button
+                  icon={<ReloadOutlined />}
+                  className="ml-2"
+                  onClick={() => loadPages()}
+                >
+                  {t("savedPages.buttons.refresh", "刷新")}
+                </Button>
               </Tooltip>
-            ]}
-          >
-            <List.Item.Meta
-              title={
-                <div className="flex items-center">
-                  <a href={page.url} target="_blank" rel="noopener noreferrer">{page.title}</a>
-                  {page.rating > 0 && (
-                    <Rate
-                      disabled
-                      value={page.rating}
-                      className="ml-2"
-                      style={{ fontSize: '14px' }}
-                    />
-                  )}
-                </div>
-              }
-              description={
-                <div>
-                  <div className="text-gray-500 mb-1 truncate">{page.url}</div>
-                  {page.summary && (
-                    <div className="text-gray-700 mb-2 line-clamp-3">{page.summary}</div>
-                  )}
-                  <div className="mb-1">
-                    {page.tags.map(tag => (
-                      <Tag key={tag} color="blue" className="mr-1">{tag}</Tag>
-                    ))}
-                  </div>
-                  {page.notes && <div className="text-gray-700">{page.notes}</div>}
-                  <div className="text-gray-400 text-xs mt-1">
-                    {t("savedPages.savedAt", "保存于 {{date}}", { date: new Date(page.createdAt).toLocaleString() })}
-                  </div>
-                </div>
-              }
-              avatar={page.favicon ? <img src={page.favicon} alt="favicon" className="w-4 h-4" /> : null}
-            />
-          </List.Item>
-        )}
-        pagination={false}
-      />
+            </div>
 
-      <div className="mt-4 flex justify-center">
-        <Pagination
-          current={currentPage}
-          pageSize={PAGE_SIZE}
-          total={total}
-          onChange={setCurrentPage}
-          size="small"
-        />
-      </div>
+            <div className="mt-2">
+              <span className="mr-2">{t("savedPages.tagFilter.label", "标签筛选:")}</span>
+              {allTags.map(tag => (
+                <Tag
+                  key={tag}
+                  color={selectedTags.includes(tag) ? "blue" : undefined}
+                  className="cursor-pointer mb-1"
+                  onClick={() => handleTagSelect(tag)}
+                >
+                  {tag}
+                </Tag>
+              ))}
+            </div>
+          </div>
+
+          <List
+            loading={loading}
+            dataSource={pages}
+            renderItem={page => (
+              <List.Item
+                key={page.id}
+                actions={[
+                  <Tooltip title={t("savedPages.actions.viewOriginal", "查看原页面")}>
+                    <Button icon={<EyeOutlined />} onClick={() => handleView(page)} />
+                  </Tooltip>,
+                  <Tooltip title={t("savedPages.actions.viewHtml", "查看原始HTML")}>
+                    <Button icon={<CodeOutlined />} onClick={() => handleViewHtml(page)} />
+                  </Tooltip>,
+                  <Tooltip title={t("savedPages.actions.viewSummary", "查看摘要详情")}>
+                    <Button icon={<FileTextOutlined />} onClick={() => handleViewSummary(page)} />
+                  </Tooltip>,
+                  <Tooltip title={t("savedPages.actions.edit", "编辑")}>
+                    <Button icon={<EditOutlined />} onClick={() => handleEdit(page)} />
+                  </Tooltip>,
+                  <Tooltip title={t("savedPages.actions.delete", "删除")}>
+                    <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(page.id)} />
+                  </Tooltip>
+                ]}
+              >
+                <List.Item.Meta
+                  title={
+                    <div className="flex items-center">
+                      <a href={page.url} target="_blank" rel="noopener noreferrer">{page.title}</a>
+                      {page.rating > 0 && (
+                        <Rate
+                          disabled
+                          value={page.rating}
+                          className="ml-2"
+                          style={{ fontSize: '14px' }}
+                        />
+                      )}
+                    </div>
+                  }
+                  description={
+                    <div>
+                      <div className="text-gray-500 mb-1 truncate">{page.url}</div>
+                      {page.summary && (
+                        <div className="text-gray-700 mb-2 line-clamp-3">{page.summary}</div>
+                      )}
+                      <div className="mb-1">
+                        {page.tags.map(tag => (
+                          <Tag key={tag} color="blue" className="mr-1">{tag}</Tag>
+                        ))}
+                      </div>
+                      {page.notes && <div className="text-gray-700">{page.notes}</div>}
+                      <div className="text-gray-400 text-xs mt-1">
+                        {t("savedPages.savedAt", "保存于 {{date}}", { date: new Date(page.createdAt).toLocaleString() })}
+                      </div>
+                    </div>
+                  }
+                  avatar={page.favicon ? <img src={page.favicon} alt="favicon" className="w-4 h-4" /> : null}
+                />
+              </List.Item>
+            )}
+            pagination={false}
+          />
+
+          <div className="mt-4 flex justify-center">
+            <Pagination
+              current={currentPage}
+              pageSize={PAGE_SIZE}
+              total={total}
+              onChange={setCurrentPage}
+              size="small"
+            />
+          </div>
+        </TabPane>
+        <TabPane 
+          tab={<span><SettingOutlined /> {t("savedPages.tabs.autoSaveSettings", "自动保存设置")}</span>} 
+          key="2"
+        >
+          <AutoSaveSettings />
+        </TabPane>
+      </Tabs>
 
       {/* 编辑模态框 */}
       <Modal

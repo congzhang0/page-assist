@@ -1,88 +1,41 @@
 import logger from "@/utils/logger";
+import { browser } from "wxt/browser";
+import { screenshotThrottler } from "@/services/screenshot-throttler";
 
-const captureVisibleTab = () => {
+const captureVisibleTab = async () => {
   logger.debug('开始捕获当前标签页截图');
 
-  const result = new Promise<string>((resolve, reject) => {
+  try {
+    // 获取当前活动标签页
+    let tabs;
     if (import.meta.env.BROWSER === "chrome" || import.meta.env.BROWSER === "edge") {
-      logger.debug('使用 Chrome/Edge API 捕获截图');
-      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-        if (!tabs || tabs.length === 0) {
-          logger.error('无法获取当前标签页');
-          reject(new Error('无法获取当前标签页'));
-          return;
-        }
-
-        const tab = tabs[0];
-        logger.debug('获取到当前标签页', { tabId: tab.id, url: tab.url });
-
-        chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
-          if (chrome.runtime.lastError) {
-            logger.error('截图捕获失败', chrome.runtime.lastError);
-            reject(new Error(`截图捕获失败: ${chrome.runtime.lastError.message}`));
-            return;
-          }
-
-          if (!dataUrl) {
-            logger.error('截图数据为空');
-            reject(new Error('截图数据为空'));
-            return;
-          }
-
-          logger.debug('成功捕获截图', { dataUrlLength: dataUrl.length });
-          resolve(dataUrl);
+      tabs = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, (result) => {
+          resolve(result);
         });
       });
     } else {
-      logger.debug('使用 Firefox/其他浏览器 API 捕获截图');
-      browser.tabs
-        .query({ active: true, currentWindow: true })
-        .then(async (tabs) => {
-          if (!tabs || tabs.length === 0) {
-            logger.error('无法获取当前标签页');
-            reject(new Error('无法获取当前标签页'));
-            return;
-          }
-
-          const tab = tabs[0];
-          logger.debug('获取到当前标签页', { tabId: tab.id, url: tab.url });
-
-          try {
-            logger.debug('开始捕获截图，设置10秒超时');
-            const dataUrl = (await Promise.race([
-              browser.tabs.captureVisibleTab(null, { format: "png" }),
-              new Promise((_, reject) =>
-                setTimeout(
-                  () => {
-                    logger.error('截图捕获超时');
-                    reject(new Error("截图捕获超时（10秒）"));
-                  },
-                  10000
-                )
-              )
-            ])) as string;
-
-            if (!dataUrl) {
-              logger.error('截图数据为空');
-              reject(new Error('截图数据为空'));
-              return;
-            }
-
-            logger.debug('成功捕获截图', { dataUrlLength: dataUrl.length });
-            resolve(dataUrl);
-          } catch (error) {
-            logger.error('捕获截图时出错', error);
-            reject(error);
-          }
-        })
-        .catch(error => {
-          logger.error('查询标签页失败', error);
-          reject(error);
-        });
+      tabs = await browser.tabs.query({ active: true, currentWindow: true });
     }
-  });
 
-  return result;
+    if (!tabs || tabs.length === 0) {
+      logger.error('无法获取当前标签页');
+      throw new Error('无法获取当前标签页');
+    }
+
+    const tab = tabs[0];
+    logger.debug('获取到当前标签页', { tabId: tab.id, url: tab.url });
+
+    // 使用截图节流管理器进行截图，避免超过配额限制
+    logger.debug('通过截图节流管理器请求截图');
+    const dataUrl = await screenshotThrottler.enqueue(null, { format: "png" });
+
+    logger.debug('成功获取截图', { dataUrlLength: dataUrl.length });
+    return dataUrl;
+  } catch (error) {
+    logger.error('截图过程中出错', error);
+    throw error;
+  }
 };
 
 export const getScreenshotFromCurrentTab = async () => {
@@ -99,12 +52,21 @@ export const getScreenshotFromCurrentTab = async () => {
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "截图捕获失败";
-    logger.error('获取截图失败', { error: errorMessage });
+
+    // 检查是否是配额限制错误
+    const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
+
+    if (isQuotaError) {
+      logger.warn('截图配额限制错误，已通过节流管理器处理', { error: errorMessage });
+    } else {
+      logger.error('获取截图失败', { error: errorMessage });
+    }
 
     return {
       success: false,
       screenshot: null,
-      error: errorMessage
+      error: errorMessage,
+      isQuotaError // 添加标志，表明是否是配额限制错误
     };
   }
 };
