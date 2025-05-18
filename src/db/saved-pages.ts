@@ -112,6 +112,7 @@ const openDatabase = (): Promise<IDBDatabase> => {
 export class SavedPagesDB {
   /**
    * 保存页面到数据库
+   * 如果URL已存在，则更新现有记录
    */
   async savePage(params: SavePageParams): Promise<SavedPage> {
     logger.debug('开始保存页面到数据库', {
@@ -124,6 +125,39 @@ export class SavedPagesDB {
     });
 
     try {
+      // 首先检查URL是否已存在
+      const existingPage = await this.getPageByUrl(params.url);
+
+      if (existingPage) {
+        logger.info('URL已存在，将更新现有记录', {
+          url: params.url,
+          existingId: existingPage.id
+        });
+
+        // 更新现有记录
+        const updatedPage = await this.updatePage(existingPage.id, {
+          title: params.title,
+          tags: params.tags,
+          notes: params.notes,
+          summary: params.summary,
+          rating: params.rating,
+          // 添加其他需要更新的字段
+          content: params.content,
+          html: params.html,
+          type: params.type,
+          favicon: params.favicon,
+          screenshot: params.screenshot
+        } as Partial<SavedPage>);
+
+        logger.info('成功更新现有页面', {
+          id: updatedPage.id,
+          url: updatedPage.url
+        });
+
+        return updatedPage;
+      }
+
+      // 如果URL不存在，则添加新记录
       const db = await openDatabase();
 
       return new Promise((resolve, reject) => {
@@ -160,11 +194,11 @@ export class SavedPagesDB {
           screenshot: params.screenshot
         };
 
-        logger.debug('准备添加页面到数据库', { id: page.id });
+        logger.debug('准备添加新页面到数据库', { id: page.id });
         const request = store.add(page);
 
         request.onsuccess = () => {
-          logger.info('页面成功保存到数据库', { id: page.id, title: page.title });
+          logger.info('新页面成功保存到数据库', { id: page.id, title: page.title });
           resolve(page);
         };
 
@@ -278,6 +312,33 @@ export class SavedPagesDB {
         db.close();
       };
     });
+  }
+
+  /**
+   * 根据URL获取页面
+   * @param url 页面URL
+   * @returns 匹配的页面，如果没有找到则返回null
+   */
+  async getPageByUrl(url: string): Promise<SavedPage | null> {
+    logger.debug('根据URL查找页面', { url });
+
+    try {
+      // 获取所有页面
+      const pages = await this.getAllPages();
+
+      // 查找完全匹配URL的页面
+      const exactMatch = pages.find(page => page.url === url);
+      if (exactMatch) {
+        logger.debug('找到完全匹配的页面', { id: exactMatch.id, url });
+        return exactMatch;
+      }
+
+      logger.debug('未找到匹配的页面', { url });
+      return null;
+    } catch (error) {
+      logger.error('根据URL查找页面失败', error);
+      return null;
+    }
   }
 
   /**

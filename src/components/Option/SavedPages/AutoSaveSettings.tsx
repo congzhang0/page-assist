@@ -68,6 +68,20 @@ const AutoSaveSettings: React.FC = () => {
       try {
         const savedSettings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
         if (savedSettings) {
+          // 确保paused属性存在，如果不存在则设置为默认值false
+          if (savedSettings.paused === undefined) {
+            savedSettings.paused = false;
+            // 保存更新后的设置
+            await storage.set(STORAGE_KEY, savedSettings);
+            console.log('已为设置添加paused属性，默认值为false');
+          }
+
+          console.log('加载自动保存设置', {
+            enabled: savedSettings.enabled,
+            paused: savedSettings.paused,
+            rulesCount: savedSettings.websites?.length
+          });
+
           setSettings(savedSettings);
         }
       } catch (error) {

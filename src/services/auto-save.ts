@@ -22,11 +22,24 @@ export interface AutoSaveSettings {
   paused: boolean; // 是否暂停自动保存（临时停止但保留设置）
 }
 
+// 保存任务状态枚举
+export enum SaveTaskStatus {
+  WAITING = 'waiting',   // 等待中
+  SAVING = 'saving',     // 保存中
+  COMPLETED = 'completed', // 已完成
+  FAILED = 'failed'      // 失败
+}
+
 // 保存任务类型
-interface SaveTask {
+export interface SaveTask {
   tabId: number;
   url: string;
+  title?: string;
   timeoutId: number;
+  createdAt: number;      // 创建时间
+  scheduledAt: number;    // 计划保存时间
+  status: SaveTaskStatus; // 任务状态
+  error?: string;         // 错误信息（如果有）
 }
 
 // 当前保存任务列表
@@ -41,7 +54,10 @@ const storage = new Storage({ area: 'local' });
  * @param pattern 匹配规则，支持通配符
  */
 export const isUrlMatchPattern = (url: string, pattern: string): boolean => {
-  if (pattern === '*') return true;
+  if (pattern === '*') {
+    logger.debug(`URL匹配: ${url} 匹配全局通配符 *`);
+    return true;
+  }
 
   try {
     // 提取URL的主要部分
@@ -58,16 +74,26 @@ export const isUrlMatchPattern = (url: string, pattern: string): boolean => {
     const pathname = urlObj.pathname; // 例如 /path/to/page
     const fullUrl = urlObj.href; // 完整URL
 
+    logger.debug(`URL解析: ${url} => 主机名=${hostname}, 路径=${pathname}`);
+
     // 处理不同类型的匹配模式
     if (pattern.startsWith('*.')) {
       // 域名通配符匹配，例如 *.example.com
       const domain = pattern.substring(2);
-      return hostname === domain || hostname.endsWith('.' + domain);
+      const isMatch = hostname === domain || hostname.endsWith('.' + domain);
+
+      logger.debug(`域名通配符匹配: ${hostname} 与 ${pattern} => ${isMatch ? '匹配' : '不匹配'}`);
+      logger.debug(`匹配详情: domain=${domain}, 检查条件1=${hostname === domain}, 检查条件2=${hostname.endsWith('.' + domain)}`);
+
+      return isMatch;
     } else if (pattern.endsWith('/*')) {
       // 路径通配符匹配，例如 example.com/*
       const domainWithPath = pattern.substring(0, pattern.length - 2);
-      return fullUrl.startsWith('http://' + domainWithPath) ||
-             fullUrl.startsWith('https://' + domainWithPath);
+      const isMatch = fullUrl.startsWith('http://' + domainWithPath) ||
+                      fullUrl.startsWith('https://' + domainWithPath);
+
+      logger.debug(`路径通配符匹配: ${fullUrl} 与 ${pattern} => ${isMatch ? '匹配' : '不匹配'}`);
+      return isMatch;
     } else {
       // 将通配符转换为正则表达式
       const regexPattern = pattern
@@ -77,7 +103,15 @@ export const isUrlMatchPattern = (url: string, pattern: string): boolean => {
       const regex = new RegExp(`^${regexPattern}$`);
 
       // 尝试匹配完整URL、主机名和路径
-      return regex.test(fullUrl) || regex.test(hostname) || regex.test(pathname);
+      const matchFullUrl = regex.test(fullUrl);
+      const matchHostname = regex.test(hostname);
+      const matchPathname = regex.test(pathname);
+      const isMatch = matchFullUrl || matchHostname || matchPathname;
+
+      logger.debug(`正则表达式匹配: ${url} 与 ${pattern} (正则=${regexPattern}) => ${isMatch ? '匹配' : '不匹配'}`);
+      logger.debug(`匹配详情: 完整URL=${matchFullUrl}, 主机名=${matchHostname}, 路径=${matchPathname}`);
+
+      return isMatch;
     }
   } catch (error) {
     logger.error('URL匹配规则解析错误:', error);
@@ -91,57 +125,99 @@ export const isUrlMatchPattern = (url: string, pattern: string): boolean => {
  * @param settings 自动保存设置
  */
 export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings): Promise<boolean> => {
-  if (!url) return false;
+  if (!url) {
+    logger.debug('URL为空，不会自动保存');
+    return false;
+  }
 
   try {
     // 如果没有提供设置，从存储中获取
     if (!settings) {
       settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+      logger.debug('从存储中获取自动保存设置', {
+        enabled: settings?.enabled,
+        paused: settings?.paused,
+        rulesCount: settings?.websites?.length
+      });
     }
 
     // 如果自动保存功能未启用或已暂停，返回false
-    if (!settings || !settings.enabled || settings.paused) return false;
+    if (!settings || !settings.enabled) {
+      logger.debug('自动保存功能未启用，不会自动保存', { url });
+      return false;
+    }
+
+    if (settings.paused) {
+      logger.debug('自动保存功能已暂停，不会自动保存', { url });
+      return false;
+    }
 
     // 获取所有启用的规则
     const enabledRules = settings.websites.filter(rule => rule.enabled);
+    logger.debug('获取启用的规则', {
+      url,
+      enabledRulesCount: enabledRules.length,
+      rules: enabledRules.map(r => r.pattern)
+    });
 
     // 如果没有启用的规则，返回false
-    if (enabledRules.length === 0) return false;
+    if (enabledRules.length === 0) {
+      logger.debug('没有启用的规则，不会自动保存', { url });
+      return false;
+    }
 
     // 规则优先级处理：
     // 1. 首先检查是否有明确的排除规则（以 "!" 开头的规则）
     // 2. 然后检查是否有明确的包含规则（精确匹配的规则）
     // 3. 最后检查通配符规则
+    logger.debug('开始按优先级检查规则', { url });
 
     // 检查排除规则（以 "!" 开头的规则）
-    for (const rule of enabledRules) {
-      if (rule.pattern.startsWith('!') && isUrlMatchPattern(url, rule.pattern.substring(1))) {
-        logger.debug(`URL ${url} 匹配排除规则 ${rule.pattern}，不会自动保存`);
+    const excludeRules = enabledRules.filter(rule => rule.pattern.startsWith('!'));
+    logger.debug('检查排除规则', { url, excludeRulesCount: excludeRules.length });
+
+    for (const rule of excludeRules) {
+      const patternWithoutPrefix = rule.pattern.substring(1);
+      logger.debug(`检查排除规则: ${url} 与 ${patternWithoutPrefix}`);
+
+      if (isUrlMatchPattern(url, patternWithoutPrefix)) {
+        logger.info(`URL ${url} 匹配排除规则 ${rule.pattern}，不会自动保存`);
         return false;
       }
     }
 
     // 检查精确匹配规则（不包含通配符的规则）
-    for (const rule of enabledRules) {
-      if (!rule.pattern.startsWith('!') && !rule.pattern.includes('*')) {
-        if (url.includes(rule.pattern)) {
-          logger.debug(`URL ${url} 匹配精确规则 ${rule.pattern}，将自动保存`);
-          return true;
-        }
+    const exactRules = enabledRules.filter(rule =>
+      !rule.pattern.startsWith('!') && !rule.pattern.includes('*')
+    );
+    logger.debug('检查精确匹配规则', { url, exactRulesCount: exactRules.length });
+
+    for (const rule of exactRules) {
+      logger.debug(`检查精确规则: ${url} 是否包含 ${rule.pattern}`);
+
+      if (url.includes(rule.pattern)) {
+        logger.info(`URL ${url} 匹配精确规则 ${rule.pattern}，将自动保存`);
+        return true;
       }
     }
 
     // 检查通配符规则
-    for (const rule of enabledRules) {
-      if (!rule.pattern.startsWith('!') && rule.pattern.includes('*')) {
-        if (isUrlMatchPattern(url, rule.pattern)) {
-          logger.debug(`URL ${url} 匹配通配符规则 ${rule.pattern}，将自动保存`);
-          return true;
-        }
+    const wildcardRules = enabledRules.filter(rule =>
+      !rule.pattern.startsWith('!') && rule.pattern.includes('*')
+    );
+    logger.debug('检查通配符规则', { url, wildcardRulesCount: wildcardRules.length });
+
+    for (const rule of wildcardRules) {
+      logger.debug(`检查通配符规则: ${url} 与 ${rule.pattern}`);
+
+      if (isUrlMatchPattern(url, rule.pattern)) {
+        logger.info(`URL ${url} 匹配通配符规则 ${rule.pattern}，将自动保存`);
+        return true;
       }
     }
 
     // 如果没有匹配任何规则，返回false
+    logger.debug(`URL ${url} 不匹配任何规则，不会自动保存`);
     return false;
   } catch (error) {
     logger.error('检查URL是否应该自动保存时出错:', error);
@@ -206,10 +282,16 @@ export const autoSavePage = async (tabId: number): Promise<void> => {
 
     // 检查URL是否应该自动保存
     const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+    logger.debug('检查URL是否应该自动保存', {
+      url,
+      enabled: settings?.enabled,
+      paused: settings?.paused
+    });
+
     const shouldSave = await shouldAutoSaveUrl(url, settings);
 
     if (!shouldSave) {
-      logger.debug('URL不符合自动保存规则:', url);
+      logger.debug('URL不符合自动保存规则，跳过自动保存:', url);
       return;
     }
 
@@ -223,10 +305,13 @@ export const autoSavePage = async (tabId: number): Promise<void> => {
     // 检查URL是否已经保存过
     const alreadySaved = await isUrlAlreadySaved(url);
     if (alreadySaved) {
-      logger.debug('URL已经保存过，将更新:', url);
+      logger.info('URL已经保存过，将更新现有记录:', url);
+    } else {
+      logger.info('URL未保存过，将创建新记录:', url);
     }
 
     // 自动保存页面，添加auto-save标签
+    // 由于我们已经修改了savedPagesDB.savePage方法，它会自动处理URL已存在的情况
     await saveCurrentPage({
       tags: ['auto-save'],
       notes: '自动保存的页面'
@@ -247,6 +332,7 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
     // 获取标签页信息
     const tab = await browser.tabs.get(tabId);
     const url = tab.url;
+    const title = tab.title || '';
 
     if (!url || url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:')) {
       return;
@@ -254,26 +340,78 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
 
     // 获取自动保存设置
     const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
-    if (!settings || !settings.enabled || settings.paused) return;
+    if (!settings || !settings.enabled || settings.paused) {
+      logger.debug(`标签页 ${tabId} 不设置自动保存任务: 功能未启用或已暂停`, {
+        enabled: settings?.enabled,
+        paused: settings?.paused
+      });
+      return;
+    }
 
     // 检查URL是否应该自动保存
     const shouldSave = await shouldAutoSaveUrl(url, settings);
-    if (!shouldSave) return;
+    if (!shouldSave) {
+      logger.debug(`标签页 ${tabId} 不设置自动保存任务: URL不符合规则`, { url });
+      return;
+    }
 
     // 清除之前的任务（如果存在）
     clearAutoSaveTask(tabId);
 
     // 设置新的自动保存任务
+    const now = Date.now();
     const delayMs = settings.saveDelay * 60 * 1000; // 转换为毫秒
+    const scheduledAt = now + delayMs;
+
     const timeoutId = setTimeout(() => {
-      autoSavePage(tabId);
-      saveTasks.delete(tabId);
+      // 更新任务状态为保存中
+      const task = saveTasks.get(tabId);
+      if (task) {
+        task.status = SaveTaskStatus.SAVING;
+        saveTasks.set(tabId, task);
+      }
+
+      // 执行保存
+      autoSavePage(tabId).then(() => {
+        // 保存成功，更新任务状态
+        const task = saveTasks.get(tabId);
+        if (task) {
+          task.status = SaveTaskStatus.COMPLETED;
+          saveTasks.set(tabId, task);
+
+          // 5秒后删除已完成的任务
+          setTimeout(() => {
+            saveTasks.delete(tabId);
+          }, 5000);
+        }
+      }).catch(error => {
+        // 保存失败，更新任务状态
+        const task = saveTasks.get(tabId);
+        if (task) {
+          task.status = SaveTaskStatus.FAILED;
+          task.error = error instanceof Error ? error.message : String(error);
+          saveTasks.set(tabId, task);
+        }
+      });
     }, delayMs);
 
     // 保存任务信息
-    saveTasks.set(tabId, { tabId, url, timeoutId });
+    saveTasks.set(tabId, {
+      tabId,
+      url,
+      title,
+      timeoutId,
+      createdAt: now,
+      scheduledAt,
+      status: SaveTaskStatus.WAITING
+    });
 
-    logger.debug(`已为标签页 ${tabId} 设置自动保存任务，延迟: ${settings.saveDelay} 分钟`);
+    logger.debug(`已为标签页 ${tabId} 设置自动保存任务`, {
+      url,
+      title,
+      delay: settings.saveDelay,
+      scheduledAt: new Date(scheduledAt).toLocaleString()
+    });
   } catch (error) {
     logger.error('设置自动保存任务失败:', error);
   }
@@ -290,6 +428,14 @@ export const clearAutoSaveTask = (tabId: number): void => {
     saveTasks.delete(tabId);
     logger.debug(`已清除标签页 ${tabId} 的自动保存任务`);
   }
+};
+
+/**
+ * 获取当前所有保存任务
+ * @returns 当前所有保存任务的数组
+ */
+export const getAllSaveTasks = (): SaveTask[] => {
+  return Array.from(saveTasks.values());
 };
 
 /**
