@@ -1,0 +1,74 @@
+{
+  "title": "Saved Pages",
+  "search": {
+    "placeholder": "Search title or content"
+  },
+  "buttons": {
+    "export": "Export",
+    "import": "Import",
+    "refresh": "Refresh"
+  },
+  "tagFilter": {
+    "label": "Tag filter:"
+  },
+  "actions": {
+    "viewOriginal": "View original page",
+    "viewHtml": "View original HTML",
+    "viewSummary": "View summary details",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "savedAt": "Saved on {{date}}",
+  "deleteConfirm": {
+    "title": "Confirm Delete",
+    "content": "Are you sure you want to delete this saved page? This action cannot be undone.",
+    "okText": "Delete",
+    "cancelText": "Cancel"
+  },
+  "editModal": {
+    "title": "Edit Page Information",
+    "titleLabel": "Title",
+    "ratingLabel": "Rating",
+    "tagsLabel": "Tags",
+    "addTagPlaceholder": "Add tag",
+    "summaryLabel": "Summary",
+    "summaryPlaceholder": "Page content summary",
+    "notesLabel": "Notes",
+    "okText": "Save",
+    "cancelText": "Cancel"
+  },
+  "htmlModal": {
+    "title": "Original HTML Content",
+    "noHtml": "No original HTML content saved or current page is not HTML type."
+  },
+  "summaryModal": {
+    "title": "Content Summary Details",
+    "summaryTitle": "Content Summary",
+    "noSummary": "No summary generated",
+    "ratingTitle": "Content Rating",
+    "ratingValue": "{{rating}}/5",
+    "tagsTitle": "Keyword Tags",
+    "loadError": "Unable to load page information."
+  },
+  "messages": {
+    "deleted": "Page deleted",
+    "deleteFailed": "Failed to delete page",
+    "updated": "Page updated",
+    "updateFailed": "Failed to update page",
+    "exportSuccess": "Export successful",
+    "exportFailed": "Export failed",
+    "importSuccess": "Successfully imported {{count}} pages",
+    "importFailed": "Import failed",
+    "importFailedInvalidFormat": "Import failed: Invalid file format",
+    "loadFailed": "Failed to load pages"
+  },
+  "errors": {
+    "deleteFailed": "Failed to delete page:",
+    "updateFailed": "Failed to update page:",
+    "exportFailed": "Export failed:",
+    "parseImportFailed": "Failed to parse import file:",
+    "importFailed": "Import failed:",
+    "loadFailed": "Failed to load pages:",
+    "loadTagsFailed": "Failed to load tags:"
+  }
+}

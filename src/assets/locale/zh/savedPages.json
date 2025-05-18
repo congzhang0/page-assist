@@ -1,0 +1,74 @@
+{
+  "title": "已保存的页面",
+  "search": {
+    "placeholder": "搜索标题或内容"
+  },
+  "buttons": {
+    "export": "导出",
+    "import": "导入",
+    "refresh": "刷新"
+  },
+  "tagFilter": {
+    "label": "标签筛选:"
+  },
+  "actions": {
+    "viewOriginal": "查看原页面",
+    "viewHtml": "查看原始HTML",
+    "viewSummary": "查看摘要详情",
+    "edit": "编辑",
+    "delete": "删除"
+  },
+  "savedAt": "保存于 {{date}}",
+  "deleteConfirm": {
+    "title": "确认删除",
+    "content": "确定要删除这个保存的页面吗？此操作不可恢复。",
+    "okText": "删除",
+    "cancelText": "取消"
+  },
+  "editModal": {
+    "title": "编辑页面信息",
+    "titleLabel": "标题",
+    "ratingLabel": "评分",
+    "tagsLabel": "标签",
+    "addTagPlaceholder": "添加标签",
+    "summaryLabel": "摘要",
+    "summaryPlaceholder": "页面内容摘要",
+    "notesLabel": "备注",
+    "okText": "保存",
+    "cancelText": "取消"
+  },
+  "htmlModal": {
+    "title": "原始HTML内容",
+    "noHtml": "没有保存原始HTML内容或当前页面不是HTML类型。"
+  },
+  "summaryModal": {
+    "title": "内容摘要详情",
+    "summaryTitle": "内容摘要",
+    "noSummary": "未生成摘要",
+    "ratingTitle": "内容评分",
+    "ratingValue": "{{rating}}/5",
+    "tagsTitle": "关键词标签",
+    "loadError": "无法加载页面信息。"
+  },
+  "messages": {
+    "deleted": "页面已删除",
+    "deleteFailed": "删除页面失败",
+    "updated": "页面已更新",
+    "updateFailed": "更新页面失败",
+    "exportSuccess": "导出成功",
+    "exportFailed": "导出失败",
+    "importSuccess": "成功导入 {{count}} 个页面",
+    "importFailed": "导入失败",
+    "importFailedInvalidFormat": "导入失败: 无效的文件格式",
+    "loadFailed": "加载页面失败"
+  },
+  "errors": {
+    "deleteFailed": "删除页面失败:",
+    "updateFailed": "更新页面失败:",
+    "exportFailed": "导出失败:",
+    "parseImportFailed": "解析导入文件失败:",
+    "importFailed": "导入失败:",
+    "loadFailed": "加载页面失败:",
+    "loadTagsFailed": "加载标签失败:"
+  }
+}

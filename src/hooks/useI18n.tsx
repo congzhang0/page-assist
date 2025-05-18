@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 export const useI18n = () => {
   const { i18n } = useTranslation()
   const [locale, setLocale] = useState<string>(
-    localStorage.getItem("i18nextLng") || "en"
+    localStorage.getItem("i18nextLng") || "zh-CN"
   )
 
   const changeLocale = (lang: string) => {
