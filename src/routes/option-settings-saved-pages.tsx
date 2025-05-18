@@ -96,19 +96,19 @@ const SavedPagesContent: React.FC = () => {
   // 处理页面删除
   const handleDelete = async (id: string) => {
     Modal.confirm({
-      title: "确认删除",
-      content: "确定要删除这个保存的页面吗？此操作不可恢复。",
-      okText: "删除",
+      title: t("savedPages.deleteConfirm.title", "确认删除"),
+      content: t("savedPages.deleteConfirm.content", "确定要删除这个保存的页面吗？此操作不可恢复。"),
+      okText: t("savedPages.deleteConfirm.okText", "删除"),
       okType: "danger",
-      cancelText: "取消",
+      cancelText: t("savedPages.deleteConfirm.cancelText", "取消"),
       onOk: async () => {
         try {
           await deleteSavedPage(id);
-          message.success("页面已删除");
+          message.success(t("savedPages.messages.deleted", "页面已删除"));
           loadPages();
         } catch (error) {
-          console.error("删除页面失败:", error);
-          message.error("删除页面失败");
+          console.error(t("savedPages.errors.deleteFailed", "删除页面失败:"), error);
+          message.error(t("savedPages.messages.deleteFailed", "删除页面失败"));
         }
       }
     });
@@ -138,13 +138,13 @@ const SavedPagesContent: React.FC = () => {
         summary: editSummary
       });
 
-      message.success("页面已更新");
+      message.success(t("savedPages.messages.updated", "页面已更新"));
       setEditModalVisible(false);
       loadPages();
       loadTags(); // 重新加载标签，以防有新标签
     } catch (error) {
-      console.error("更新页面失败:", error);
-      message.error("更新页面失败");
+      console.error(t("savedPages.errors.updateFailed", "更新页面失败:"), error);
+      message.error(t("savedPages.messages.updateFailed", "更新页面失败"));
     }
   };
 
@@ -180,10 +180,10 @@ const SavedPagesContent: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      message.success("导出成功");
+      message.success(t("savedPages.messages.exportSuccess", "导出成功"));
     } catch (error) {
-      console.error("导出失败:", error);
-      message.error("导出失败");
+      console.error(t("savedPages.errors.exportFailed", "导出失败:"), error);
+      message.error(t("savedPages.messages.exportFailed", "导出失败"));
     }
   };
 
@@ -205,19 +205,19 @@ const SavedPagesContent: React.FC = () => {
             const data = JSON.parse(event.target?.result as string) as SavedPage[];
             const count = await importSavedPages(data);
 
-            message.success(`成功导入 ${count} 个页面`);
+            message.success(t("savedPages.messages.importSuccess", "成功导入 {{count}} 个页面", { count }));
             loadPages();
             loadTags();
           } catch (error) {
-            console.error("解析导入文件失败:", error);
-            message.error("导入失败: 无效的文件格式");
+            console.error(t("savedPages.errors.parseImportFailed", "解析导入文件失败:"), error);
+            message.error(t("savedPages.messages.importFailedInvalidFormat", "导入失败: 无效的文件格式"));
           }
         };
 
         reader.readAsText(file);
       } catch (error) {
-        console.error("导入失败:", error);
-        message.error("导入失败");
+        console.error(t("savedPages.errors.importFailed", "导入失败:"), error);
+        message.error(t("savedPages.messages.importFailed", "导入失败"));
       }
     };
 
@@ -245,14 +245,14 @@ const SavedPagesContent: React.FC = () => {
   return (
     <div className="p-4">
       <div className="mb-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold">已保存的页面</h1>
+        <h1 className="text-xl font-bold">{t("savedPages.title", "已保存的页面")}</h1>
 
         <Space>
           <Button icon={<ExportOutlined />} onClick={handleExport}>
-            导出
+            {t("savedPages.buttons.export", "导出")}
           </Button>
           <Button icon={<ImportOutlined />} onClick={handleImport}>
-            导入
+            {t("savedPages.buttons.import", "导入")}
           </Button>
         </Space>
       </div>
@@ -260,25 +260,25 @@ const SavedPagesContent: React.FC = () => {
       <div className="mb-4">
         <div className="flex items-center mb-2">
           <Input.Search
-            placeholder="搜索标题或内容"
+            placeholder={t("savedPages.search.placeholder", "搜索标题或内容")}
             allowClear
             enterButton={<SearchOutlined />}
             onSearch={handleSearch}
             className="flex-1"
           />
-          <Tooltip title="刷新">
+          <Tooltip title={t("savedPages.buttons.refresh", "刷新")}>
             <Button
               icon={<ReloadOutlined />}
               className="ml-2"
               onClick={() => loadPages()}
             >
-              刷新
+              {t("savedPages.buttons.refresh", "刷新")}
             </Button>
           </Tooltip>
         </div>
 
         <div className="mt-2">
-          <span className="mr-2">标签筛选:</span>
+          <span className="mr-2">{t("savedPages.tagFilter.label", "标签筛选:")}</span>
           {allTags.map(tag => (
             <Tag
               key={tag}
@@ -299,19 +299,19 @@ const SavedPagesContent: React.FC = () => {
           <List.Item
             key={page.id}
             actions={[
-              <Tooltip title="查看原页面">
+              <Tooltip title={t("savedPages.actions.viewOriginal", "查看原页面")}>
                 <Button icon={<EyeOutlined />} onClick={() => handleView(page)} />
               </Tooltip>,
-              <Tooltip title="查看原始HTML">
+              <Tooltip title={t("savedPages.actions.viewHtml", "查看原始HTML")}>
                 <Button icon={<CodeOutlined />} onClick={() => handleViewHtml(page)} />
               </Tooltip>,
-              <Tooltip title="查看摘要详情">
+              <Tooltip title={t("savedPages.actions.viewSummary", "查看摘要详情")}>
                 <Button icon={<FileTextOutlined />} onClick={() => handleViewSummary(page)} />
               </Tooltip>,
-              <Tooltip title="编辑">
+              <Tooltip title={t("savedPages.actions.edit", "编辑")}>
                 <Button icon={<EditOutlined />} onClick={() => handleEdit(page)} />
               </Tooltip>,
-              <Tooltip title="删除">
+              <Tooltip title={t("savedPages.actions.delete", "删除")}>
                 <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(page.id)} />
               </Tooltip>
             ]}
@@ -343,7 +343,7 @@ const SavedPagesContent: React.FC = () => {
                   </div>
                   {page.notes && <div className="text-gray-700">{page.notes}</div>}
                   <div className="text-gray-400 text-xs mt-1">
-                    保存于 {new Date(page.createdAt).toLocaleString()}
+                    {t("savedPages.savedAt", "保存于 {{date}}", { date: new Date(page.createdAt).toLocaleString() })}
                   </div>
                 </div>
               }
@@ -366,25 +366,25 @@ const SavedPagesContent: React.FC = () => {
 
       {/* 编辑模态框 */}
       <Modal
-        title="编辑页面信息"
-        open={editModalVisible}
-        onOk={handleSaveEdit}
-        onCancel={() => setEditModalVisible(false)}
-        okText="保存"
-        cancelText="取消"
+        title={t("savedPages.editModal.title", "编辑页面信息")}
+      open={editModalVisible}
+      onOk={handleSaveEdit}
+      onCancel={() => setEditModalVisible(false)}
+      okText={t("savedPages.editModal.okText", "保存")}
+      cancelText={t("savedPages.editModal.cancelText", "取消")}
       >
         <div className="mb-4">
-          <label className="block mb-1">标题</label>
+          <label className="block mb-1">{t("savedPages.editModal.titleLabel", "标题")}</label>
           <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} />
         </div>
 
         <div className="mb-4">
-          <label className="block mb-1">评分</label>
+          <label className="block mb-1">{t("savedPages.editModal.ratingLabel", "评分")}</label>
           <Rate value={editRating} onChange={setEditRating} />
         </div>
 
         <div className="mb-4">
-          <label className="block mb-1">标签</label>
+          <label className="block mb-1">{t("savedPages.editModal.tagsLabel", "标签")}</label>
           <div className="mb-2">
             {editTags.map(tag => (
               <Tag
@@ -403,24 +403,24 @@ const SavedPagesContent: React.FC = () => {
               value={newTag}
               onChange={e => setNewTag(e.target.value)}
               onPressEnter={handleAddTag}
-              placeholder="添加标签"
+              placeholder={t("savedPages.editModal.addTagPlaceholder", "添加标签")}
             />
             <Button icon={<TagOutlined />} onClick={handleAddTag} />
           </Input.Group>
         </div>
 
         <div className="mb-4">
-          <label className="block mb-1">摘要</label>
+          <label className="block mb-1">{t("savedPages.editModal.summaryLabel", "摘要")}</label>
           <Input.TextArea
             value={editSummary}
             onChange={e => setEditSummary(e.target.value)}
             rows={3}
-            placeholder="页面内容摘要"
+            placeholder={t("savedPages.editModal.summaryPlaceholder", "页面内容摘要")}
           />
         </div>
 
         <div className="mb-4">
-          <label className="block mb-1">备注</label>
+          <label className="block mb-1">{t("savedPages.editModal.notesLabel", "备注")}</label>
           <Input.TextArea
             value={editNotes}
             onChange={e => setEditNotes(e.target.value)}
@@ -431,11 +431,11 @@ const SavedPagesContent: React.FC = () => {
 
       {/* 原始HTML查看模态框 */}
       <Modal
-        title="原始HTML内容"
-        open={htmlModalVisible}
-        onCancel={() => setHtmlModalVisible(false)}
-        width={800}
-        footer={null}
+        title={t("savedPages.htmlModal.title", "原始HTML内容")}
+      open={htmlModalVisible}
+      onCancel={() => setHtmlModalVisible(false)}
+      width={800}
+      footer={null}
       >
         {currentViewPage?.html ? (
           <div className="max-h-[70vh] overflow-auto">
@@ -447,37 +447,37 @@ const SavedPagesContent: React.FC = () => {
           </div>
         ) : (
           <Typography.Paragraph className="text-gray-500">
-            没有保存原始HTML内容或当前页面不是HTML类型。
+            {t("savedPages.htmlModal.noHtml", "没有保存原始HTML内容或当前页面不是HTML类型。")}
           </Typography.Paragraph>
         )}
       </Modal>
 
       {/* 摘要详情模态框 */}
       <Modal
-        title="内容摘要详情"
-        open={summaryModalVisible}
-        onCancel={() => setSummaryModalVisible(false)}
-        footer={null}
+        title={t("savedPages.summaryModal.title", "内容摘要详情")}
+      open={summaryModalVisible}
+      onCancel={() => setSummaryModalVisible(false)}
+      footer={null}
       >
         {currentViewPage ? (
           <div>
             <div className="mb-4">
-              <h3 className="font-bold mb-2">内容摘要</h3>
+              <h3 className="font-bold mb-2">{t("savedPages.summaryModal.summaryTitle", "内容摘要")}</h3>
               <Typography.Paragraph className="bg-gray-50 dark:bg-gray-800 p-3 rounded">
-                {currentViewPage.summary || "未生成摘要"}
+                {currentViewPage.summary || t("savedPages.summaryModal.noSummary", "未生成摘要")}
               </Typography.Paragraph>
             </div>
 
             <div className="mb-4">
-              <h3 className="font-bold mb-2">内容评分</h3>
+              <h3 className="font-bold mb-2">{t("savedPages.summaryModal.ratingTitle", "内容评分")}</h3>
               <div className="flex items-center">
                 <Rate disabled value={currentViewPage.rating || 0} />
-                <span className="ml-2 text-gray-500">{currentViewPage.rating || 0}/5</span>
+                <span className="ml-2 text-gray-500">{t("savedPages.summaryModal.ratingValue", "{{rating}}/5", { rating: currentViewPage.rating || 0 })}</span>
               </div>
             </div>
 
             <div className="mb-4">
-              <h3 className="font-bold mb-2">关键词标签</h3>
+              <h3 className="font-bold mb-2">{t("savedPages.summaryModal.tagsTitle", "关键词标签")}</h3>
               <div>
                 {currentViewPage.tags.map(tag => (
                   <Tag key={tag} color="blue" className="mr-1 mb-1">{tag}</Tag>
@@ -487,7 +487,7 @@ const SavedPagesContent: React.FC = () => {
           </div>
         ) : (
           <Typography.Paragraph className="text-gray-500">
-            无法加载页面信息。
+            {t("savedPages.summaryModal.loadError", "无法加载页面信息。")}
           </Typography.Paragraph>
         )}
       </Modal>

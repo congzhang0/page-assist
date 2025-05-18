@@ -43,8 +43,8 @@ export const SidepanelSavedPages: React.FC = () => {
 
       setLoading(false);
     } catch (error) {
-      console.error("加载页面失败:", error);
-      message.error("加载页面失败");
+      console.error(t("savedPages.errors.loadFailed", "加载页面失败:"), error);
+      message.error(t("savedPages.messages.loadFailed", "加载页面失败"));
       setLoading(false);
     }
   };
@@ -55,7 +55,7 @@ export const SidepanelSavedPages: React.FC = () => {
       const tags = await getAllTags();
       setAllTags(tags);
     } catch (error) {
-      console.error("加载标签失败:", error);
+      console.error(t("savedPages.errors.loadTagsFailed", "加载标签失败:"), error);
     }
   };
 
@@ -89,19 +89,19 @@ export const SidepanelSavedPages: React.FC = () => {
   // 处理页面删除
   const handleDelete = async (id: string) => {
     Modal.confirm({
-      title: "确认删除",
-      content: "确定要删除这个保存的页面吗？此操作不可恢复。",
-      okText: "删除",
+      title: t("savedPages.deleteConfirm.title", "确认删除"),
+      content: t("savedPages.deleteConfirm.content", "确定要删除这个保存的页面吗？此操作不可恢复。"),
+      okText: t("savedPages.deleteConfirm.okText", "删除"),
       okType: "danger",
-      cancelText: "取消",
+      cancelText: t("savedPages.deleteConfirm.cancelText", "取消"),
       onOk: async () => {
         try {
           await deleteSavedPage(id);
-          message.success("页面已删除");
+          message.success(t("savedPages.messages.deleted", "页面已删除"));
           loadPages();
         } catch (error) {
-          console.error("删除页面失败:", error);
-          message.error("删除页面失败");
+          console.error(t("savedPages.errors.deleteFailed", "删除页面失败:"), error);
+          message.error(t("savedPages.messages.deleteFailed", "删除页面失败"));
         }
       }
     });
@@ -129,13 +129,13 @@ export const SidepanelSavedPages: React.FC = () => {
         rating: editRating
       });
 
-      message.success("页面已更新");
+      message.success(t("savedPages.messages.updated", "页面已更新"));
       setEditModalVisible(false);
       loadPages();
       loadTags(); // 重新加载标签，以防有新标签
     } catch (error) {
-      console.error("更新页面失败:", error);
-      message.error("更新页面失败");
+      console.error(t("savedPages.errors.updateFailed", "更新页面失败:"), error);
+      message.error(t("savedPages.messages.updateFailed", "更新页面失败"));
     }
   };
 
@@ -166,14 +166,14 @@ export const SidepanelSavedPages: React.FC = () => {
       <div className="mb-3">
         <div className="flex items-center mb-2">
           <Input.Search
-            placeholder="搜索标题或内容"
+            placeholder={t("savedPages.search.placeholder", "搜索标题或内容")}
             allowClear
             enterButton={<SearchOutlined />}
             onSearch={handleSearch}
             className="flex-1"
             size="small"
           />
-          <Tooltip title="刷新">
+          <Tooltip title={t("savedPages.buttons.refresh", "刷新")}>
             <Button
               icon={<ReloadOutlined />}
               size="small"
@@ -184,7 +184,7 @@ export const SidepanelSavedPages: React.FC = () => {
         </div>
 
         <div className="mt-2 max-h-20 overflow-y-auto">
-          <span className="mr-2 text-xs">标签筛选:</span>
+          <span className="mr-2 text-xs">{t("savedPages.tagFilter.label", "标签筛选:")}</span>
           {allTags.map(tag => (
             <Tag
               key={tag}
@@ -207,13 +207,13 @@ export const SidepanelSavedPages: React.FC = () => {
             key={page.id}
             className="border-b border-gray-200 dark:border-gray-700 py-2"
             actions={[
-              <Tooltip title="查看原页面">
+              <Tooltip title={t("savedPages.actions.viewOriginal", "查看原页面")}>
                 <Button size="small" icon={<EyeOutlined />} onClick={() => handleView(page)} />
               </Tooltip>,
-              <Tooltip title="编辑">
+              <Tooltip title={t("savedPages.actions.edit", "编辑")}>
                 <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(page)} />
               </Tooltip>,
-              <Tooltip title="删除">
+              <Tooltip title={t("savedPages.actions.delete", "删除")}>
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(page.id)} />
               </Tooltip>
             ]}
@@ -252,7 +252,7 @@ export const SidepanelSavedPages: React.FC = () => {
                     {page.tags.length > 3 && <Tag className="text-xs">+{page.tags.length - 3}</Tag>}
                   </div>
                   <div className="text-gray-400 text-xs">
-                    保存于 {new Date(page.createdAt).toLocaleDateString()}
+                    {t("savedPages.savedAt", "保存于 {{date}}", { date: new Date(page.createdAt).toLocaleDateString() })}
                   </div>
                 </div>
               }
@@ -275,25 +275,25 @@ export const SidepanelSavedPages: React.FC = () => {
 
       {/* 编辑模态框 */}
       <Modal
-        title="编辑页面信息"
+        title={t("savedPages.editModal.title", "编辑页面信息")}
         open={editModalVisible}
         onOk={handleSaveEdit}
         onCancel={() => setEditModalVisible(false)}
-        okText="保存"
-        cancelText="取消"
+        okText={t("savedPages.editModal.okText", "保存")}
+        cancelText={t("savedPages.editModal.cancelText", "取消")}
       >
         <div className="mb-3">
-          <label className="block mb-1 text-sm">标题</label>
+          <label className="block mb-1 text-sm">{t("savedPages.editModal.titleLabel", "标题")}</label>
           <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} />
         </div>
 
         <div className="mb-3">
-          <label className="block mb-1 text-sm">评分</label>
+          <label className="block mb-1 text-sm">{t("savedPages.editModal.ratingLabel", "评分")}</label>
           <Rate value={editRating} onChange={setEditRating} />
         </div>
 
         <div className="mb-3">
-          <label className="block mb-1 text-sm">标签</label>
+          <label className="block mb-1 text-sm">{t("savedPages.editModal.tagsLabel", "标签")}</label>
           <div className="mb-2">
             {editTags.map(tag => (
               <Tag
@@ -312,14 +312,14 @@ export const SidepanelSavedPages: React.FC = () => {
               value={newTag}
               onChange={e => setNewTag(e.target.value)}
               onPressEnter={handleAddTag}
-              placeholder="添加标签"
+              placeholder={t("savedPages.editModal.addTagPlaceholder", "添加标签")}
             />
             <Button icon={<TagOutlined />} onClick={handleAddTag} />
           </Input.Group>
         </div>
 
         <div className="mb-3">
-          <label className="block mb-1 text-sm">备注</label>
+          <label className="block mb-1 text-sm">{t("savedPages.editModal.notesLabel", "备注")}</label>
           <Input.TextArea
             value={editNotes}
             onChange={e => setEditNotes(e.target.value)}

@@ -6,6 +6,7 @@ import settings from "@/assets/locale/zh/settings.json";
 import knowledge from "@/assets/locale/zh/knowledge.json";
 import chrome from "@/assets/locale/zh/chrome.json";
 import openai from "@/assets/locale/zh/openai.json";
+import savedPages from "@/assets/locale/zh/savedPages.json";
 
 
 export const zh = {
@@ -16,5 +17,6 @@ export const zh = {
     settings,
     knowledge,
     chrome,
-    openai
+    openai,
+    savedPages
 }

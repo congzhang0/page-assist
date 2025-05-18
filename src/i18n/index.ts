@@ -48,8 +48,8 @@ i18n
             ko: ko,
             ar: ar
         },
-        fallbackLng: "en",
-        lng: localStorage.getItem("i18nextLng") || "en",
+        fallbackLng: "zh-CN",
+        lng: localStorage.getItem("i18nextLng") || "zh-CN",
     });
 
 export default i18n;
