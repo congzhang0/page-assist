@@ -43,11 +43,23 @@ export const showStatusNotification = (
  * @param message 阶段消息
  */
 export const showSaveProgress = (stage: string, message: string): void => {
-  showStatusNotification(
-    `保存页面 - ${stage}`,
-    message,
-    StatusType.INFO
-  );
+  // 根据阶段选择图标和类型
+  let type = StatusType.INFO;
+
+  // 根据阶段调整通知类型
+  if (stage.includes('错误')) {
+    type = StatusType.ERROR;
+  } else if (stage.includes('完成')) {
+    type = StatusType.SUCCESS;
+  } else if (stage.includes('等待') || stage.includes('队列')) {
+    type = StatusType.WARNING;
+  }
+
+  // 创建更详细的通知标题
+  const title = `保存页面 - ${stage}`;
+
+  // 使用标准的通知函数显示通知
+  showStatusNotification(title, message, type);
 };
 
 /**
