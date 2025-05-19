@@ -2,6 +2,31 @@ import logger from "@/utils/logger";
 import { browser } from "wxt/browser";
 import { screenshotThrottler } from "@/services/screenshot-throttler";
 
+/**
+ * 捕获指定标签页的截图
+ * @param tabId 标签页ID
+ * @returns 截图数据URL
+ */
+const captureSpecificTab = async (tabId: number) => {
+  logger.debug('开始捕获指定标签页截图', { tabId });
+
+  try {
+    // 使用截图节流管理器进行截图，避免超过配额限制
+    logger.debug('通过截图节流管理器请求截图', { tabId });
+    const dataUrl = await screenshotThrottler.enqueue(tabId, { format: "png" });
+
+    logger.debug('成功获取截图', { tabId, dataUrlLength: dataUrl.length });
+    return dataUrl;
+  } catch (error) {
+    logger.error('截图过程中出错', { tabId, error });
+    throw error;
+  }
+};
+
+/**
+ * 捕获当前活动标签页的截图
+ * @returns 截图数据URL
+ */
 const captureVisibleTab = async () => {
   logger.debug('开始捕获当前标签页截图');
 
@@ -38,6 +63,48 @@ const captureVisibleTab = async () => {
   }
 };
 
+/**
+ * 获取指定标签页的截图
+ * @param tabId 标签页ID
+ * @returns 截图结果
+ */
+export const getScreenshotFromSpecificTab = async (tabId: number) => {
+  logger.info('开始获取指定标签页截图', { tabId });
+
+  try {
+    const screenshotDataUrl = await captureSpecificTab(tabId);
+    logger.info('成功获取截图', { tabId, dataUrlLength: screenshotDataUrl.length });
+
+    return {
+      success: true,
+      screenshot: screenshotDataUrl,
+      error: null
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "截图捕获失败";
+
+    // 检查是否是配额限制错误
+    const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
+
+    if (isQuotaError) {
+      logger.warn('截图配额限制错误，已通过节流管理器处理', { tabId, error: errorMessage });
+    } else {
+      logger.error('获取截图失败', { tabId, error: errorMessage });
+    }
+
+    return {
+      success: false,
+      screenshot: null,
+      error: errorMessage,
+      isQuotaError // 添加标志，表明是否是配额限制错误
+    };
+  }
+};
+
+/**
+ * 获取当前标签页的截图
+ * @returns 截图结果
+ */
 export const getScreenshotFromCurrentTab = async () => {
   logger.info('开始获取当前标签页截图');
 

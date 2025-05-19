@@ -18,6 +18,7 @@ const DownloadQueue: React.FC = () => {
   useEffect(() => {
     const loadTasks = () => {
       const allTasks = getAllSaveTasks();
+      console.log('下载队列任务数量:', allTasks.length);
       setTasks(allTasks);
     };
 
@@ -64,9 +65,9 @@ const DownloadQueue: React.FC = () => {
     const now = Date.now();
     const elapsed = now - task.createdAt;
     const total = task.scheduledAt - task.createdAt;
-    
+
     if (total <= 0) return 100;
-    
+
     const progress = Math.min(Math.floor((elapsed / total) * 100), 99);
     return progress;
   };
@@ -77,9 +78,9 @@ const DownloadQueue: React.FC = () => {
 
     const now = Date.now();
     const remaining = Math.max(0, task.scheduledAt - now);
-    
+
     if (remaining <= 0) return '即将保存';
-    
+
     const seconds = Math.ceil(remaining / 1000);
     if (seconds < 60) {
       return `${seconds}秒后保存`;
@@ -135,9 +136,9 @@ const DownloadQueue: React.FC = () => {
                         <div>
                           <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
                           <div className="mt-1">
-                            <Progress 
-                              percent={calculateProgress(task)} 
-                              size="small" 
+                            <Progress
+                              percent={calculateProgress(task)}
+                              size="small"
                               status="active"
                               format={() => formatRemainingTime(task)}
                             />

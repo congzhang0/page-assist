@@ -111,6 +111,7 @@ const AutoSaveSettings: React.FC = () => {
   // 切换暂停/恢复状态
   const handleTogglePause = (checked: boolean) => {
     const newSettings = { ...settings, paused: checked };
+    console.log(`切换自动保存暂停状态: ${checked ? '暂停' : '恢复'}`);
     saveSettings(newSettings);
   };
 
