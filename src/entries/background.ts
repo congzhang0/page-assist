@@ -8,7 +8,7 @@ import { syncService } from "@/services/sync/sync-service"
 import { initDebugCommands } from "@/utils/debug-commands"
 import statusIndicator from "@/utils/status-indicator"
 import storageViewer from "@/utils/storage-viewer"
-import { initAutoSave } from "@/services/auto-save"
+import { initAutoSave, updateAutoSaveStatus, manualCheckAllTabs } from "@/services/auto-save"
 import { screenshotThrottler } from "@/services/screenshot-throttler"
 import logger from '@/utils/logger'
 
@@ -30,6 +30,9 @@ export default defineBackground({
 
     // 初始化自动保存功能
     initAutoSave()
+
+    // 更新自动保存状态指示器
+    updateAutoSaveStatus()
 
     // 记录截图节流管理器已初始化
     logger.info('截图节流管理器已初始化，将限制截图请求频率以避免超过浏览器配额限制')
@@ -210,6 +213,10 @@ export default defineBackground({
         }
 
         await streamDownload(ollamaURL, message.modelName)
+      } else if (message.type === "check_all_tabs") {
+        // 手动检查所有标签页
+        const { checked, setup, filtered } = await manualCheckAllTabs();
+        return { checked, setup, filtered };
       }
     })
 
