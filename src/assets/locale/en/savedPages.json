@@ -5,6 +5,12 @@
   "search": {
     "placeholder": "Search title or content"
   },
+  "tabs": {
+    "savedPages": "Saved Pages",
+    "autoSaveSettings": "Auto Save Settings",
+    "downloadQueue": "Download Queue",
+    "syncSettings": "Sync Settings"
+  },
   "buttons": {
     "export": "Export",
     "import": "Import",

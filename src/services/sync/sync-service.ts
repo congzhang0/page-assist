@@ -4,7 +4,7 @@ import { syncQueue } from './sync-queue';
 import { syncWorker } from './sync-worker';
 
 // 支持的实体类型
-export type EntityType = 'document' | 'model' | 'knowledge' | 'vector' | 'message';
+export type EntityType = 'document' | 'model' | 'knowledge' | 'vector' | 'message' | 'page';
 
 // 数据变更追踪接口
 export interface DataChangeEvent {
@@ -38,18 +38,18 @@ export class SyncService {
 
     // 获取配置
     const config = await getSyncConfig();
-    
+
     // 设置状态
     this.status = config.enabled ? SyncServiceStatus.IDLE : SyncServiceStatus.DISABLED;
-    
+
     // 监听同步事件
     syncEventManager.addEventListener(SyncEventType.SYNC_SUCCESS, this.handleSyncSuccess.bind(this));
     syncEventManager.addEventListener(SyncEventType.SYNC_ERROR, this.handleSyncError.bind(this));
     syncEventManager.addEventListener(SyncEventType.CONNECTIVITY_CHANGE, this.handleConnectivityChange.bind(this));
-    
+
     // 设置定期同步
     this.setupPeriodicSync();
-    
+
     this.initialized = true;
   }
 
@@ -60,7 +60,7 @@ export class SyncService {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
     }
-    
+
     // 设置新的定时器（每15分钟检查一次）
     // 使用数字类型转换确保与不同环境兼容
     this.syncInterval = Number(setInterval(() => {
@@ -75,14 +75,14 @@ export class SyncService {
       entityType: change.entityType,
       data: change.data,
     });
-    
+
     // 触发数据变更事件
     syncEventManager.dispatchEvent({
       type: SyncEventType.DATA_CHANGE,
       payload: change,
       timestamp: Date.now(),
     });
-    
+
     // 尝试同步
     this.synchronize();
   }
@@ -92,7 +92,7 @@ export class SyncService {
     try {
       const config = await getSyncConfig();
       if (!config.enabled) return;
-      
+
       this.setStatus(SyncServiceStatus.SYNCING);
       syncWorker.startSync();
     } catch (error) {
@@ -115,9 +115,9 @@ export class SyncService {
   public async setEnabled(enabled: boolean): Promise<void> {
     try {
       await updateSyncConfig({ enabled });
-      
+
       this.setStatus(enabled ? SyncServiceStatus.IDLE : SyncServiceStatus.DISABLED);
-      
+
       if (enabled) {
         this.synchronize();
       } else {
@@ -167,9 +167,9 @@ export class SyncService {
   // 更新状态
   private setStatus(status: SyncServiceStatus): void {
     if (this.status === status) return;
-    
+
     this.status = status;
-    
+
     // 通知所有监听器
     this.statusListeners.forEach(listener => {
       try {
@@ -199,4 +199,4 @@ export class SyncService {
 }
 
 // 导出单例
-export const syncService = new SyncService(); 
+export const syncService = new SyncService();

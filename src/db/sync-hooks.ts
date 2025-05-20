@@ -12,7 +12,7 @@ export const syncHooks = {
         data: document,
       });
     },
-    
+
     // 更新后钩子
     afterUpdate: (document: any) => {
       syncService.trackChange({
@@ -21,7 +21,7 @@ export const syncHooks = {
         data: document,
       });
     },
-    
+
     // 删除后钩子
     afterDelete: (id: string) => {
       syncService.trackChange({
@@ -31,7 +31,7 @@ export const syncHooks = {
       });
     },
   },
-  
+
   // 模型操作钩子
   model: {
     afterCreate: (model: any) => {
@@ -41,7 +41,7 @@ export const syncHooks = {
         data: model,
       });
     },
-    
+
     afterUpdate: (model: any) => {
       syncService.trackChange({
         entityType: 'model',
@@ -49,7 +49,7 @@ export const syncHooks = {
         data: model,
       });
     },
-    
+
     afterDelete: (id: string) => {
       syncService.trackChange({
         entityType: 'model',
@@ -58,7 +58,7 @@ export const syncHooks = {
       });
     },
   },
-  
+
   // 知识库操作钩子
   knowledge: {
     afterCreate: (knowledge: any) => {
@@ -68,7 +68,7 @@ export const syncHooks = {
         data: knowledge,
       });
     },
-    
+
     afterUpdate: (knowledge: any) => {
       syncService.trackChange({
         entityType: 'knowledge',
@@ -76,7 +76,7 @@ export const syncHooks = {
         data: knowledge,
       });
     },
-    
+
     afterDelete: (id: string) => {
       syncService.trackChange({
         entityType: 'knowledge',
@@ -85,7 +85,7 @@ export const syncHooks = {
       });
     },
   },
-  
+
   // 向量操作钩子
   vector: {
     afterCreate: (vector: any) => {
@@ -95,7 +95,7 @@ export const syncHooks = {
         data: vector,
       });
     },
-    
+
     afterUpdate: (vector: any) => {
       syncService.trackChange({
         entityType: 'vector',
@@ -103,7 +103,7 @@ export const syncHooks = {
         data: vector,
       });
     },
-    
+
     afterDelete: (id: string) => {
       syncService.trackChange({
         entityType: 'vector',
@@ -112,7 +112,7 @@ export const syncHooks = {
       });
     },
   },
-  
+
   // 消息操作钩子
   message: {
     afterCreate: (message: any) => {
@@ -122,7 +122,7 @@ export const syncHooks = {
         data: message,
       });
     },
-    
+
     afterUpdate: (message: any) => {
       syncService.trackChange({
         entityType: 'message',
@@ -130,7 +130,7 @@ export const syncHooks = {
         data: message,
       });
     },
-    
+
     afterDelete: (id: string) => {
       syncService.trackChange({
         entityType: 'message',
@@ -139,4 +139,31 @@ export const syncHooks = {
       });
     },
   },
-}; 
+
+  // 页面操作钩子
+  page: {
+    afterCreate: (page: any) => {
+      syncService.trackChange({
+        entityType: 'page',
+        operation: 'create',
+        data: page,
+      });
+    },
+
+    afterUpdate: (page: any) => {
+      syncService.trackChange({
+        entityType: 'page',
+        operation: 'update',
+        data: page,
+      });
+    },
+
+    afterDelete: (id: string) => {
+      syncService.trackChange({
+        entityType: 'page',
+        operation: 'delete',
+        data: { id },
+      });
+    },
+  },
+};

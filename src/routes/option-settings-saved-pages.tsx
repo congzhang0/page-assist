@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography, Tabs } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined, CloudSyncOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
 import type { SavedPage } from "@/db/saved-pages";
 import { useNavigate } from "react-router-dom";
 import { SettingsLayout } from "@/components/Layouts/SettingsOptionLayout";
 import AutoSaveSettings from "@/components/Option/SavedPages/AutoSaveSettings";
 import DownloadQueue from "@/components/Option/SavedPages/DownloadQueue";
+import { SyncSettings } from "@/components/Sidepanel/Settings/SyncSettings";
 
 const PAGE_SIZE = 10;
 
@@ -384,6 +385,12 @@ const SavedPagesContent: React.FC = () => {
           key="3"
         >
           <DownloadQueue />
+        </TabPane>
+        <TabPane
+          tab={<span><CloudSyncOutlined /> {t("savedPages.tabs.syncSettings", "同步设置")}</span>}
+          key="4"
+        >
+          <SyncSettings />
         </TabPane>
       </Tabs>
 
