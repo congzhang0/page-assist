@@ -59,12 +59,12 @@
       }
     },
     "sidepanelRag": {
-      "heading": "Copilot Chatt med Webbplats Inställningar",
+      "heading": "Hämtningsinställningar",
       "ragEnabled": {
-        "label": "Chatta med webbplatsen med vektorinbäddningar"
+        "label": "Aktivera Inbäddning och Hämtning"
       },
       "maxWebsiteContext": {
-        "label": "Vanligt läge webbplatsinnehållsstorlek",
+        "label": "Maximal Innehållsstorlek för Fullständigt Kontextläge",
         "placeholder": "Innehållsstorlek (standard 4028)"
       }
     },
@@ -120,6 +120,9 @@
       "heading": "Text till Tal Inställningar",
       "ttsEnabled": {
         "label": "Aktivera Text till Tal"
+      },
+      "ttsAutoPlay": {
+        "label": "Spela upp röstsvaret automatiskt efter slutförande"
       },
       "ttsProvider": {
         "label": "Text till Tal Leverantör",

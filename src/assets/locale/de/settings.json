@@ -53,12 +53,12 @@
       }
     },
     "sidepanelRag": {
-      "heading": "Copilot Chat mit Website-Einstellungen",
+      "heading": "Abruf-Einstellungen",
       "ragEnabled": {
-        "label": "Chat mit Website unter Verwendung von Vektor-Embeddings"
+        "label": "Einbettung und Abruf aktivieren"
       },
       "maxWebsiteContext": {
-        "label": "Normaler Modus Website-Inhaltsgröße",
+        "label": "Maximale Inhaltsgröße für Vollkontext-Modus",
         "placeholder": "Inhaltsgröße (Standard 4028)"
       }
     },
@@ -114,6 +114,9 @@
       "heading": "Text-zu-Sprache-Einstellungen",
       "ttsEnabled": {
         "label": "Text-zu-Sprache aktivieren"
+      },
+      "ttsAutoPlay": {
+        "label": "Sprachantwort nach Fertigstellung automatisch abspielen"
       },
       "ttsProvider": {
         "label": "Text-zu-Sprache-Anbieter",

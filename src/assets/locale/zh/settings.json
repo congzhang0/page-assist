@@ -62,12 +62,12 @@
       }
     },
     "sidepanelRag": {
-      "heading": "与网站对话的Copilot聊天设置",
+      "heading": "检索设置",
       "ragEnabled": {
-        "label": "使用向量嵌入与网站聊天"
+        "label": "启用嵌入和检索"
       },
       "maxWebsiteContext": {
-        "label": "普通模式下的网站内容大小",
+        "label": "完整上下文模式的最大内容大小",
         "placeholder": "内容大小（默认4028）"
       }
     },
@@ -123,6 +123,9 @@
       "heading": "文本转语音设置",
       "ttsEnabled": {
         "label": "启用文本转语音"
+      },
+      "ttsAutoPlay": {
+        "label": "完成后自动播放语音回复"
       },
       "ttsProvider": {
         "label": "文本转语音提供商",

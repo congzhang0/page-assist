@@ -9,7 +9,12 @@ import {
 import { isGoogleDocs, parseGoogleDocs } from "@/parser/google-docs"
 import { cleanUnwantedUnicode } from "@/utils/clean"
 import logger from "@/utils/logger"
-
+import { isYoutubeLink } from "@/utils/is-youtube"
+import { YtTranscript } from "yt-transcript"
+const getTranscript = async (url: string) => {
+  const ytTranscript = new YtTranscript({ url })
+  return await ytTranscript.getTranscript()
+}
 const _getHtml = () => {
   const url = window.location.href
   const title = document.title
@@ -487,4 +492,32 @@ export const getDataFromCurrentTab = async () => {
   const data = defaultExtractContent(content);
   logger.info('成功提取页面内容', { extractedContentLength: data?.length });
   return { url, title, content: data, type, pdf: [], favicon };
+}
+
+export const getContentFromCurrentTab = async (isUsingVS: boolean) => {
+  const data = await getDataFromCurrentTab()
+
+  if (isUsingVS) {
+    return data
+  }
+
+  if (isYoutubeLink(data.url)) {
+    console.log("Youtube link detected")
+
+    const transcript = await getTranscript(data.url)
+    if (!transcript) {
+      return data
+    }
+
+    const text = transcript
+      .map(item => `[${item?.start}] ${item?.text}`)
+      .join(" ")
+
+    return {
+      ...data,
+      content: text,
+    }
+  }
+
+  return data
 }

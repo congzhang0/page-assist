@@ -10,6 +10,7 @@ type HistoryInfo = {
   message_source?: "copilot" | "web-ui"
   is_pinned?: boolean
   createdAt: number
+  doc_id?: string
 }
 
 type WebSearch = {
@@ -350,11 +351,12 @@ export const generateID = () => {
 export const saveHistory = async (
   title: string,
   is_rag?: boolean,
-  message_source?: "copilot" | "web-ui"
+  message_source?: "copilot" | "web-ui",
+  doc_id?: string
 ) => {
   const id = generateID()
   const createdAt = Date.now()
-  const history = { id, title, createdAt, is_rag, message_source }
+  const history = { id, title, createdAt, is_rag, message_source, doc_id }
   const db = new PageAssitDatabase()
   await db.addChatHistory(history)
   return history
@@ -687,4 +689,58 @@ export const getLastChatHistory = async (history_id: string) => {
   return lastMessage?.role === "assistant"
     ? lastMessage
     : messages.findLast((m) => m.role === "assistant")
+}
+
+export const deleteHistoriesByDateRange = async (rangeLabel: string): Promise<string[]> => {
+  const db = new PageAssitDatabase();
+  const allHistories = await db.getChatHistories();
+  const now = new Date();
+  const today = new Date(now.setHours(0, 0, 0, 0));
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const lastWeek = new Date(today);
+  lastWeek.setDate(lastWeek.getDate() - 7);
+  let historiesToDelete: HistoryInfo[] = [];
+  switch (rangeLabel) {
+    case 'today':
+      historiesToDelete = allHistories.filter(
+        (item) => !item.is_pinned && new Date(item?.createdAt) >= today
+      );
+      break;
+    case 'yesterday':
+      historiesToDelete = allHistories.filter(
+        (item) =>
+          !item.is_pinned &&
+          new Date(item?.createdAt) >= yesterday &&
+          new Date(item?.createdAt) < today
+      );
+      break;
+    case 'last7Days':
+      historiesToDelete = allHistories.filter(
+        (item) =>
+          !item.is_pinned &&
+          new Date(item?.createdAt) >= lastWeek &&
+          new Date(item?.createdAt) < yesterday
+      );
+      break;
+    case 'older':
+      historiesToDelete = allHistories.filter(
+        (item) => !item.is_pinned && new Date(item?.createdAt) < lastWeek
+      );
+      break;
+    case 'pinned':
+      historiesToDelete = allHistories.filter((item) => item.is_pinned);
+      break;
+    default:
+      return [];
+  }
+
+  const deletedIds: string[] = [];
+  for (const history of historiesToDelete) {
+    await db.deleteMessage(history.id);
+    await db.removeChatHistory(history.id);
+    deletedIds.push(history.id);
+  }
+
+  return deletedIds;
 }
