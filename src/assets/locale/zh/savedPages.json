@@ -3,6 +3,12 @@
   "search": {
     "placeholder": "搜索标题或内容"
   },
+  "tabs": {
+    "savedPages": "已保存的页面",
+    "autoSaveSettings": "自动保存设置",
+    "downloadQueue": "下载队列",
+    "syncSettings": "同步设置"
+  },
   "buttons": {
     "export": "导出",
     "import": "导入",

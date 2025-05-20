@@ -3,6 +3,7 @@
  * 使用 IndexedDB 存储保存的网页内容
  */
 import logger from '@/utils/logger';
+import { syncHooks } from './sync-hooks';
 
 // 数据库名称和版本
 const DB_NAME = 'page-assist-saved-pages';
@@ -199,6 +200,7 @@ export class SavedPagesDB {
 
         request.onsuccess = () => {
           logger.info('新页面成功保存到数据库', { id: page.id, title: page.title });
+          syncHooks.page.afterCreate(page); // 调用同步钩子
           resolve(page);
         };
 
@@ -370,6 +372,7 @@ export class SavedPagesDB {
         const updateRequest = store.put(updatedPage);
 
         updateRequest.onsuccess = () => {
+          syncHooks.page.afterUpdate(updatedPage); // 调用同步钩子
           resolve(updatedPage);
         };
 
@@ -401,6 +404,7 @@ export class SavedPagesDB {
       const request = store.delete(id);
 
       request.onsuccess = () => {
+        syncHooks.page.afterDelete(id); // 调用同步钩子
         resolve();
       };
 

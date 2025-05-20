@@ -5,7 +5,7 @@ import { SyncEventType, syncEventManager } from './sync-events';
 export interface SyncItem {
   id: string;
   operation: 'create' | 'update' | 'delete';
-  entityType: 'document' | 'model' | 'knowledge' | 'vector' | 'message';
+  entityType: 'document' | 'model' | 'knowledge' | 'vector' | 'message' | 'page';
   data: any;
   createdAt: number;
   retryCount: number;
@@ -34,10 +34,10 @@ export class SyncQueue {
 
       this.queue = result.syncQueue || [];
       this.isInitialized = true;
-      
+
       // 清理过期项目
       await this.cleanExpiredItems();
-      
+
       // 通知队列更新
       this.notifyQueueUpdated();
     } catch (error) {
@@ -50,7 +50,7 @@ export class SyncQueue {
   // 添加项目到队列
   public async addItem(item: Omit<SyncItem, 'id' | 'createdAt' | 'retryCount' | 'priority'>): Promise<string> {
     await this.ensureInitialized();
-    
+
     const syncItem: SyncItem = {
       ...item,
       id: this.generateId(),
@@ -58,30 +58,30 @@ export class SyncQueue {
       retryCount: 0,
       priority: this.getPriorityForEntityType(item.entityType),
     };
-    
+
     this.queue.push(syncItem);
     await this.persistQueue();
-    
+
     return syncItem.id;
   }
 
   // 获取下一批要同步的项目
   public async getNextBatch(): Promise<SyncItem[]> {
     await this.ensureInitialized();
-    
+
     const config = await getSyncConfig();
     const batchSize = config.batch.enabled ? config.batch.maxSize : 1;
-    
+
     // 按优先级排序
     const sortedQueue = [...this.queue].sort((a, b) => a.priority - b.priority);
-    
+
     return sortedQueue.slice(0, batchSize);
   }
 
   // 标记项目同步成功
   public async markSuccess(ids: string[]): Promise<void> {
     await this.ensureInitialized();
-    
+
     this.queue = this.queue.filter(item => !ids.includes(item.id));
     await this.persistQueue();
   }
@@ -89,7 +89,7 @@ export class SyncQueue {
   // 标记项目同步失败
   public async markFailure(id: string): Promise<void> {
     await this.ensureInitialized();
-    
+
     const item = this.queue.find(item => item.id === id);
     if (item) {
       item.retryCount++;
@@ -100,7 +100,7 @@ export class SyncQueue {
   // 获取队列状态
   public async getStats(): Promise<{ total: number, pending: number, retry: number }> {
     await this.ensureInitialized();
-    
+
     return {
       total: this.queue.length,
       pending: this.queue.filter(item => item.retryCount === 0).length,
@@ -111,18 +111,18 @@ export class SyncQueue {
   // 清理过期项目
   public async cleanExpiredItems(): Promise<number> {
     await this.ensureInitialized();
-    
+
     const config = await getSyncConfig();
     const now = Date.now();
     const expirationTime = config.retention.expirationTime;
-    
+
     const initialCount = this.queue.length;
     this.queue = this.queue.filter(item => (now - item.createdAt) < expirationTime);
-    
+
     if (initialCount !== this.queue.length) {
       await this.persistQueue();
     }
-    
+
     return initialCount - this.queue.length;
   }
 
@@ -154,6 +154,7 @@ export class SyncQueue {
     switch (entityType) {
       case 'document': return 1; // 文档最高优先级
       case 'knowledge': return 2;
+      case 'page': return 2; // 页面优先级较高
       case 'message': return 3;
       case 'model': return 4;
       case 'vector': return 5;
@@ -172,4 +173,4 @@ export class SyncQueue {
 }
 
 // 导出单例
-export const syncQueue = new SyncQueue(); 
+export const syncQueue = new SyncQueue();
