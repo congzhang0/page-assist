@@ -1,4 +1,4 @@
-import { getSyncConfig } from '@/config/sync-config';
+import { getDataProviderConfig } from '@/config/data-provider-config';
 import { SyncEventType, syncEventManager } from './sync-events';
 import { SyncItem, syncQueue } from './sync-queue';
 
@@ -38,27 +38,28 @@ export class SyncWorker {
     return true;
   }
 
-  // 启动同步
+  // 准备数据以便被拉取（pull模式）
   public async startSync(): Promise<void> {
     if (this.isSyncing) return;
 
-    const config = await getSyncConfig();
+    const config = await getDataProviderConfig();
     if (!config.enabled) return;
     if (!this.networkOnline) return;
 
     this.isSyncing = true;
-    this.abortController = new AbortController();
-
+    
     try {
-      const batch = await syncQueue.getNextBatch();
-      if (batch.length === 0) {
-        this.isSyncing = false;
-        return;
-      }
-
-      await this.processBatch(batch);
+      // 在pull模式下，我们不主动推送数据
+      // 只需确保数据已准备好被拉取
+      
+      // 触发同步成功事件
+      syncEventManager.dispatchEvent({
+        type: SyncEventType.SYNC_SUCCESS,
+        payload: { message: 'Data ready for pull' },
+        timestamp: Date.now(),
+      });
     } catch (error) {
-      console.error('Error in sync process:', error);
+      console.error('Error preparing data for pull:', error);
       // 触发同步错误事件
       syncEventManager.dispatchEvent({
         type: SyncEventType.SYNC_ERROR,
@@ -67,7 +68,6 @@ export class SyncWorker {
       });
     } finally {
       this.isSyncing = false;
-      this.abortController = null;
     }
   }
 
@@ -80,110 +80,21 @@ export class SyncWorker {
     }
   }
 
-  // 处理一批同步项目
+  // 在pull模式下，此方法不再主动处理批量同步
+  // 保留此方法签名以兼容现有代码，但实现已简化
   private async processBatch(batch: SyncItem[]): Promise<void> {
-    const config = await getSyncConfig();
-    const successfulIds: string[] = [];
-
-    // 尝试同步每个项目
-    for (const item of batch) {
-      try {
-        // 检查是否被中止
-        if (this.abortController?.signal.aborted) {
-          break;
-        }
-
-        // 检查是否超出重试次数
-        if (item.retryCount >= config.retry.maxRetries) {
-          // 删除该项目
-          await syncQueue.markSuccess([item.id]);
-          continue;
-        }
-
-        // 执行实际同步
-        await this.syncItem(item);
-        
-        // 标记成功
-        successfulIds.push(item.id);
-        
-        // 触发同步成功事件
-        syncEventManager.dispatchEvent({
-          type: SyncEventType.SYNC_SUCCESS,
-          payload: { item },
-          timestamp: Date.now(),
-        });
-      } catch (error) {
-        console.error(`Error syncing item ${item.id}:`, error);
-        
-        // 标记失败
-        await syncQueue.markFailure(item.id);
-        
-        // 触发同步错误事件
-        syncEventManager.dispatchEvent({
-          type: SyncEventType.SYNC_ERROR,
-          payload: { error, item },
-          timestamp: Date.now(),
-        });
-        
-        // 计算下次重试延迟
-        const delay = this.calculateRetryDelay(item.retryCount, config);
-        
-        // 安排重试
-        setTimeout(() => {
-          this.startSync();
-        }, delay);
-      }
-    }
-
-    // 批量标记成功
-    if (successfulIds.length > 0) {
-      await syncQueue.markSuccess(successfulIds);
-    }
-
-    // 如果还有更多项目，继续同步
-    const stats = await syncQueue.getStats();
-    if (stats.total > 0) {
-      this.startSync();
-    }
+    console.log(`[Pull Mode] ${batch.length} items ready for pull`);
+    // 在pull模式下，不主动处理批量同步
+    // 数据将等待Web应用来拉取
   }
 
-  // 同步单个项目
+  // 在pull模式下，此方法不再主动同步单个项目
+  // 保留此方法签名以兼容现有代码，但实现已简化
   private async syncItem(item: SyncItem): Promise<void> {
-    const config = await getSyncConfig();
-    
-    // 检查代理端点是否配置
-    if (!config.proxyEndpoint) {
-      throw new Error('Proxy endpoint not configured');
-    }
-
-    try {
-      // 构建请求
-      const response = await fetch(config.proxyEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: item.operation,
-          entityType: item.entityType,
-          data: item.data,
-          timestamp: Date.now(),
-          syncId: item.id,
-        }),
-        signal: this.abortController?.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Sync failed with status: ${response.status}`);
-      }
-
-      return;
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        throw new Error('Sync aborted');
-      }
-      throw error;
-    }
+    // 在pull模式下，不主动同步单个项目
+    // 数据将等待Web应用来拉取
+    console.log(`[Pull Mode] Item ${item.id} ready for pull`);
+    return;
   }
 
   // 计算重试延迟（指数退避）

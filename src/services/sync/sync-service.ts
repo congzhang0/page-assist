@@ -1,4 +1,5 @@
-import { getSyncConfig, updateSyncConfig } from '@/config/sync-config';
+import { updateSyncConfig } from '@/config/sync-config';
+import { getDataProviderConfig, updateDataProviderConfig } from '@/config/data-provider-config';
 import { SyncEventType, syncEventManager } from './sync-events';
 import { syncQueue } from './sync-queue';
 import { syncWorker } from './sync-worker';
@@ -37,7 +38,7 @@ export class SyncService {
     if (this.initialized) return;
 
     // 获取配置
-    const config = await getSyncConfig();
+    const config = await getDataProviderConfig();
 
     // 设置状态
     this.status = config.enabled ? SyncServiceStatus.IDLE : SyncServiceStatus.DISABLED;
@@ -82,21 +83,26 @@ export class SyncService {
       payload: change,
       timestamp: Date.now(),
     });
-
-    // 尝试同步
-    this.synchronize();
+    
+    // 注意：在pull模式下，不主动同步数据，而是等待Web应用来获取
+    // 数据已添加到队列，等待被拉取
   }
 
-  // 执行同步
+  // 执行同步（在pull模式下，此方法主要用于准备数据以便被拉取）
   public async synchronize(): Promise<void> {
     try {
-      const config = await getSyncConfig();
+      const config = await getDataProviderConfig();
       if (!config.enabled) return;
 
       this.setStatus(SyncServiceStatus.SYNCING);
-      syncWorker.startSync();
+      // 在pull模式下，不需要主动推送数据
+      // 只需确保数据已准备好被拉取
+      setTimeout(() => {
+        // 短暂延迟后将状态设为IDLE，表示数据已准备好
+        this.setStatus(SyncServiceStatus.IDLE);
+      }, 1000);
     } catch (error) {
-      console.error('Error starting synchronization:', error);
+      console.error('Error preparing data for synchronization:', error);
       this.setStatus(SyncServiceStatus.ERROR);
     }
   }
@@ -114,6 +120,8 @@ export class SyncService {
   // 设置同步启用状态
   public async setEnabled(enabled: boolean): Promise<void> {
     try {
+      // 同时更新两个配置以保持一致性
+      await updateDataProviderConfig({ enabled });
       await updateSyncConfig({ enabled });
 
       this.setStatus(enabled ? SyncServiceStatus.IDLE : SyncServiceStatus.DISABLED);
@@ -128,13 +136,11 @@ export class SyncService {
     }
   }
 
-  // 设置代理端点
+  // 在pull模式下不需要设置代理端点
+  // 此方法保留以兼容旧代码，但不执行任何操作
   public async setProxyEndpoint(endpoint: string): Promise<void> {
-    try {
-      await updateSyncConfig({ proxyEndpoint: endpoint });
-    } catch (error) {
-      console.error('Error setting proxy endpoint:', error);
-    }
+    console.log('setProxyEndpoint is deprecated in pull mode');
+    return;
   }
 
   // 获取同步状态
