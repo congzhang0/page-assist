@@ -18,7 +18,9 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@ant-design/cssinjs": "^1.18.4",
@@ -76,6 +78,7 @@
     "@types/chrome": "^0.0.280",
     "@types/d3-dsv": "^3.0.7",
     "@types/html-to-text": "^9.0.4",
+    "@types/jest": "^29.5.14",
     "@types/node": "20.11.9",
     "@types/pubsub-js": "^1.8.6",
     "@types/react": "18.2.48",
@@ -85,9 +88,11 @@
     "@types/turndown": "^5.0.4",
     "autoprefixer": "^10.4.17",
     "cross-env": "^7.0.3",
+    "jest": "^29.7.0",
     "postcss": "^8.4.33",
     "prettier": "3.2.4",
     "tailwindcss": "^3.4.1",
+    "ts-jest": "^29.3.4",
     "typescript": "5.3.3",
     "vite-plugin-top-level-await": "^1.4.1",
     "vitepress": "^1.6.3",

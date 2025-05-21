@@ -1,0 +1,750 @@
+8520bc0 feat:enhance download management and heatbeat
+ea1f610 feat:sync page in settings
+1842250 fix:auto save doesnt' save page correctly
+23d9769 feat: add debug info
+ac47ce9 feat: add download lsit
+2405039 feat: auto-save label for auto-saving pages, pause and resume for auto-saving, url saving rule
+5db4953 feat:set max page saved, auto save existing opening pages, status bar enhancement
+6fac942 feature: auto saving page
+aacdf7d fixed the context menu with mixed languages
+3e2284d feat: support multi languages
+cf215a3 fix build issue
+a76653c feat:add side bar to saving page
+14d0bc7 fix:view existing pages
+e7d022c feat: add progress status when saving page
+ccbd6d1 feat: add refresh for page saving
+c5cc91f add css and react spec
+d5e51f0 fix some issues
+31fd77d Merge pull request #3 from congzhang0/feat-capture
+a53ff32 feat: enable indexb sync with webapp
+e915cc8 Merge pull request #1 from congzhang0/feat-capture
+dc158ec add ingore list
+73a9be4 feat: add context menu to view saved pages
+817b88c feat:enable LLM summzry and key words, add content config in side bar
+368b932 enable llm for page saving
+4b38133 feat: save page passed
+0856761 fix side bar issue
+fcccbdd fix build issue
+e8ee9dd feat:add capture
+d2fde54 Commit build folder to install extension via dev mode
+6984c10 Merge pull request #571 from n4ze3m/next
+8fbe4fd feat: Implement custom model settings
+2d1b104 feat: Add border to Ant Design table in OpenAI settings and remove unused import
+6c3e51a feat: Pass isOpen prop to Sidebar component
+019d932 feat: Add model name to system prompt
+6cc38ab feat: Implement document compression and decompression for storage
+134f90b feat: Remove beta tag from OpenAI settings link
+6ac30f9 fix: Remove extra margin in OptionLayout
+340a62b feat: Add close button to sidebar
+33ee5e4 feat: Update dependencies
+888aded chore: Bump version to 1.5.11
+75e2cc6 Merge pull request #570 from gopenso/update-zh-TW-locale
+6408a9d Update zh-TW translations
+8d4accc Merge pull request #563 from n4ze3m/next
+6cdecab refactor: Remove redundant calls to getAllDefaultModelSettings
+6e3c51e feat: Add reasoning effort setting for OpenAI models
+1f2a486 feat: Add Markdown support for user messages and localize settings
+73f6be5 fix: Ensure keepAlive defaults to an empty string if not provided
+53937e2 fix: Remove duplicate entry in ALL_GOOGLE_DOMAINS
+5d75ad0 fix: Handle empty keepAlive in model settings
+216f17b feat: Bump version to 1.5.10
+6c7ca15 Merge pull request #556 from n4ze3m/next
+4ec3c08 feat: Implement model settings for Ollama
+3713975 feat: Integrate Exa search provider
+ca47125 feat: Add "Continue Response" functionality and localization
+06ae28e feat: Implement continue chat functionality
+6ccad08 Merge remote-tracking branch 'origin/main' into next
+7310241 Fix: Bump version to 1.5.9
+69c3cf2 feat: Firefox add-on store link
+b16e92c Merge pull request #552 from n4ze3m/next
+a365781 Feat: Translate "autoCopyResponseToClipboard" setting
+ef88bec Feat: Add auto-copy response to clipboard setting
+af059ab Fix: Refocus textarea after clearing chat
+33fea70 Fix: Remove fullscreen functionality from HTML preview
+ceaa80b Feat: Implement font size adjustment in settings
+12c083f Feat: Enhance code block and add HTML preview
+02cdbba Merge remote-tracking branch 'origin/main' into next
+b5febcf Merge pull request #547 from Mat5heus/tavily-api
+35df69e fix: Bump version to 1.5.8
+4234d5e fix: Bump version to 1.5.7.1
+4763fa7 docs: Update README with Firefox availability status
+f8da0fe fix: properly recover the API key from storage
+e145621 Merge remote-tracking branch 'upstream/main'
+6cb011e feat: Add support to Tavily API
+081504e removal of unused import 'getBraveApiKey'
+26e9fb4 Merge pull request #541 from n4ze3m/next
+6da03d2 fix: Improve custom header handling and editing in OpenAI configurations
+0674291 feat: Implement auto-stop and auto-submit for voice messages
+cd0095a feat: Implement chat history search
+09bc920 feat: Add custom headers to OpenAI configurations
+c6811f3 chore: Bump version to 1.5.7
+5bfea0e Merge pull request #528 from n4ze3m/next
+d12f805 feat: Build for Chrome, Edge, and Firefox by default
+9caf989 chore: Bump version to 1.5.6.1
+715f7fa Merge pull request #522 from n4ze3m/next
+3623bcf feat: Re-add context menu items and initialize context menu on startup
+ba6e19c feat: Add action icon and context menu settings to UI
+016d6d3 feat: Add clear context functionality
+e7dbf08 feat: Add check for website query to question model
+11aacda feat: Remove action icon click setting from UI
+a37b508 fix: Improve context menu update logic
+ca4570e feat: Initialize settings and context menu on background script load
+d2d6172 feat: Implement settings for action icon and context menu
+9eb3cb7 fix: Rename contextAction to contextMenu in settings.json
+d01f84a feat: Add system settings and UI improvements
+dcf3665 Merge remote-tracking branch 'origin/main' into next
+b67a5a7 docs: Add German tutorial to README
+41c5456 chore: Bump extension version
+ca88a06 Merge pull request #503 from n4ze3m/next
+227c317 feat: Improve knowledge base source update UI and translations
+5d8039b feat: Add new source upload and processing to knowledge base
+18633cf feat: Add source deletion to knowledge base
+c79741b feat: Add OpenRouter support to model selection
+ce17686 chore: Add note about npm fallback and ignore package-lock.json
+280bc78 feat: Improve file upload and validation for knowledge base
+7229aba feat: Improve OpenAI provider selection UI
+057f93f feat: Improve web search follow-up question logic and error handling
+b0c5db2 feat: Add support for Novita AI provider
+8e91d2a Merge pull request #501 from drewzhao/feat/cloud-providers-integration-infini-ai
+077aeff feat: Add support for provider infinigenceai
+9afe72b Merge pull request #485 from n4ze3m/next
+d5fad55 feat: Add system prompt variables for date and time
+c116ec9 feat: Add option for user chat bubbles
+c1340e5 feat: Rename "Open Copilot to Chat" to "Open Side Panel to Chat" in various locales
+50a6549 refactor: Remove unused ClipboardIcon import in Message component
+284384a feat: Simplify copy to clipboard button logic in PlaygroundMessage component
+c568f5e feat: Use systemPromptFormatter for system prompts
+d3d9622 Fix: Correct dependencies in ModelNicknameModal and simplify nickname retrieval
+b3df819 Bump version to 1.5.4 in configuration
+0d07cc4 Merge pull request #482 from garyhuangdev/add-error-handling
+9f68f6f Add error handling and cleanup code
+1a5a66b Merge pull request #478 from Nriver/update-chinese
+b398dbd add some more Chinese translations
+882cb90 make better Chinese translations
+c1fcd97 Merge pull request #477 from hgourvest/locale-fr
+86ee1b1 Update french translations.
+03a507b Merge pull request #472 from n4ze3m/next
+3a5c9a6 feat: remove console log in saveModelNickname function
+3f364e7 fix: migrate ModelNickname storage to Plasmo Storage API
+f1bc93d feat: document Stract and Startpage search providers
+25d52d8 feat: add Startpage search provider
+e2cb1a4 feat: add Stract search provider
+a7f7d23 feat: display model nickname in ImageExport and MoreOptions components
+06f8fa8 feat: add "Edit Provider" and "Edit Custom Model" titles to openai locale
+f9e9045 feat: translate "nicknameModal" fields in openai locale files
+fd9f92d feat: translate "model nickname" column in openai locale files
+5bdfedd feat: refine model nickname modal and table translations
+2227edd feat: enable nickname editing for custom models
+1b9695c feat: display model nicknames and avatars in chat messages
+1424d91 feat: integrate model nicknames and avatars throughout the UI
+b968756 feat: add nickname functionality for models with modal support
+463368a Merge pull request #470 from KGESH/typo
+397cfdd fix: typo variable name DEFAULT_WEBSEARCH_PROMP -> DEFAULT_WEBSEARCH_PROMPT
+60212e1 Merge pull request #468 from usersync/patch-1
+7cdf2ac Update README.md
+2c5ada1 Merge pull request #441 from n4ze3m/next
+5af5362 feat: Add LLaMA.cpp to supported OpenAI providers
+2c089a8 fix: Update translations for open reasoning labels across multiple languages
+53e867f feat: Implement selected model fallback for embedding
+1090e32 style: Adjust padding in PlaygroundForm and SidepanelForm for improved layout consistency
+b47d992 style(Header): Update Select component width to min-w-80 for better responsiveness
+a38108c style: Refactor CSS and clean up commented code in components
+2bd669b feat: Add LLaMa.cpp support
+6854eac feat(settings): Add option to collapse reasoning by default
+6929acf feat: Enhance message handling by adding modelName and modelImage fields
+b3eed25 feat: Refactor: Improve the UI for model selection in the settings
+09f1e70 fix: Adjust composition handling for non-Firefox browsers
+4a590ac feat: Update README.md with centered title and social media links
+ff274fc feat: Replace ClipboardIcon with CopyIcon and CopyCheckIcon
+3c2219c chore: bump version to 1.5.2 in wxt.config.ts
+5fb2532 Merge remote-tracking branch 'origin/main' into next
+d67030f Merge pull request #440 from gopenso/add-zh-TW-locale
+5acebc1 Add Traditional Chinese language
+e2dc558 fix: adjust layout and improve image handling in Playground and Sidepanel forms
+c4a41e4 feat(i18n): add 'mermaid' translation to common.json
+d9b39b5 feat: add GanttChartIcon for mermaid preview and clean up code
+b17d4cf Merge pull request #431 from zwlcoding/add-bing-search-engine
+1784662 Merge pull request #436 from zwlcoding/add-mermaid-modal-preview
+a12d2dd feat: add mermaid preview
+d490105 feat(search): add Bing as search engine
+6f80ba1 Merge pull request #424 from n4ze3m/docs
+1eab428 feat: add Internet Search, Ollama, and Privacy Policy documentation
+6542e7a feat: update Page Share documentation; rename link and create new feature file
+b7b2b22 Merge pull request #422 from n4ze3m/docs
+ab52eec feat: add Internet Search, Knowledge Base, Prompts, and Page Share documentation; update connection issue details
+d18e363 feat: add new sidebar sections for Chat with Website and Vision features, and update connection issue documentation
+08b84e3 Merge pull request #404 from n4ze3m/next
+9e0290d feat: reduce maximum width of image export container for improved layout
+64d5721 feat: increase maximum width of image export container for better layout
+a03dcbd feat: Adds the ability to export chat conversations as images with improved visual fidelity
+ea0a467 feat: add global toggle for Ollama integration
+1858fbb feat: improve context window size labeling
+f030032 feat: add automatic CORS fix toggle for Ollama integration
+b4ce92c fix: website embedding requirement in chat form
+5552fe8 feat: add documentation for LM Studio and Ollama providers, and update browser support details
+fa1670c feat: update default file size limit to 5KB in knowledge management components
+00c22f1 feat: improve error handling and content extraction in HTML loader and parser
+84a61ab feat: enhance LaTeX preprocessing with code block and expression handling
+fed3da6 feat: add VitePress documentation setup and examples
+acd4c60 feat: add wide mode setting in multiple languages
+9d45500 Merge remote-tracking branch 'origin/main' into next
+599a477 Merge pull request #399 from n4ze3m/next
+691575e Update README.md
+8121e49 Merge pull request #376 from drendog/main
+0fd8db1 fix: missing tts speaking state management
+ad204ee Merge pull request #373 from popcell/feat/cloud-providers-integration
+6629fca Merge pull request #344 from wysh3/g-p
+17c0b1c Merge pull request #325 from yz778/wide-mode
+8c8dbf2 feat: Add support for SiliconFlow, VolcEngine, TencentCloud, and AliBaBaCloud providers
+832a9ed Merge branch 'main' into wide-mode
+de367a1 Merge pull request #360 from n4ze3m/next
+084b859 feat: add option to remove reasoning tag from TTS output
+023d3c2 fix: update Twitter profile regex to match new domain x.com
+bd0c9bc feat: remove reasoning from message content in history generation
+b3307dd fix: update reasoning_content type and remove empty bind options
+7180ea8 feat: skip embedding model check when simple search is enabled
+3ca2481 feat: make keepAlive property optional and remove default value assignment
+4438613 feat: add error handling to OCR image processing function
+ef51cf8 feat: support Edge browser
+87c2024 chore: update version to 1.5.0 in wxt.config.ts
+926f4e1 feat: implement CustomAIMessageChunk class and enhance reasoning handling in useMessageOption hook
+8381f1c feat: implement mergeReasoningContent function for enhanced reasoning handling
+72eaaf9 refactor: adjust sticky positioning in SettingsOptionLayout for improved layout consistency
+7b8ba14 refactor: enhance Sidepanel layout and structure for improved usability and responsiveness
+d315a39 refactor: restructure Layout and SettingsLayout components for improved responsiveness and layout consistency
+40698e0 feat: update version to 1.4.6 and enhance code block component with download and copy sticky support
+a461568 feat: add bottom fade mask utility and enhance Playground layout
+6273ef8 Update google.ts
+1eae319 Merge pull request #332 from yz778/typos
+1b6d4a3 fix: fix some typos
+0954889 Merge branch 'main' into wide-mode
+e537221 Merge pull request #328 from n4ze3m/next
+7264f30 fix: Remove reasoning tag from tts  utterance
+0cb3ec9 A few more places for checkWideMode
+f46243b feat: add wide-mode [WIP]
+80f5812 fix: Adjust visibility styles for PlaygroundMessage component in preparation for v1.4.5 release
+342d544 feat: Add Baidu search engine
+2d1e465 Merge pull request #315 from yz778/gemini-models
+00024ac Merge pull request #323 from yz778/layout-shift
+509a732 Whitespace fix
+be6b539 fix: Fix layout shift cause by hovering over icons + misc items
+6145883 Update to use model ID as name
+af89743 fix: alternate handler for retrieving Gemini models
+b6814a9 Merge pull request #305 from n4ze3m/next
+0c48bfa feat: Enhance embedding model validation by incorporating simple internet search check
+94af788 feat: Add query invalidation for sidebar settings after saving changes
+8c0706a feat: Change default search provider to DuckDuckGo and add custom headers for Google search requests
+51804bc fix: bug fix
+7b6b675 feat: Add error handling to fetch advanced Ollama settings data
+c2c80e2 feat: Add error handling for fetching Ollama URL
+97daaf9 feat: Add reasoning UI
+17dc6a6 Merge pull request #298 from n4ze3m/next
+b39d60f feat: Update message formatting to remove model suffix in chat display
+6be1b2b feat: Add DeepSeek provider and icon to the application
+7443d0a feat: Add option to enable chat with website by default
+aacade6 feat: Add option to download chat as an image
+c1de76b chore: Bump version to 1.4.3 in wxt.config.ts
+3a75103 Merge pull request #290 from n4ze3m/next
+72926f9 feat: Improve UI styles in PlaygroundForm and Select components
+bac85d6 feat: Update UI styles in SidepanelForm component
+48b7a28 feat: Add option to enable internet search by default
+84e123b feat: Add aria-labels for accessibility in PlaygroundMessage component
+8672046 feat: Add sidebar chat history and functionality
+fbf82c3 feat: Update manifest version to 1.4.2
+d980b8d Merge pull request #285 from n4ze3m/next
+9674b84 feat: Add Ollama model settings for tfsZ, numKeep, numThread, and useMlock
+0af69a3 feat: Add text splitting configuration options
+1d9d704 feat: Add Mistral provider support feat: Update manifest version to 1.4.1
+e931f7c Merge pull request #279 from n4ze3m/next
+efb49d8 feat: Add RTL support for sidepanel settings header
+db3a80c feat: Add RTL support for header navigation
+3ddb7f1 feat: Add ElevenLabs TTS provider and response splitting options
+aa49f03 feat: Add support for minP, repeatLastN, and repeatPenalty model settings
+ef40b9a feat: Optimize entrypointsDir and content_security_policy based on target environment
+cff4338 feat: Add OCR support
+18bc597 feat: Add OCR support to message formatting
+eed1a5a fix: Swap order of storage set and url rewrite in setOllamaURL function
+a8c84f1 feat: Add Arabic language support
+e435767 fix: Update entrypointsDir and manifest version in wxt.config.ts feat: Update routing imports in options and sidepanel App components fix: Remove unused SquarePen icon import in Header component
+8d5ae26 Merge pull request #276 from n4ze3m/next
+93879fe feat: Change default keyboard shortcut to Ctrl+Shift+Y
+c49d6eb feat: Change default keyboard shortcut to Ctrl+Shift+Y
+0a5144e fix: Adjust height of message container in PlaygroundChat component
+f8bd740 feat: Adjust UI styles in PlaygroundForm and PlaygroundMessage components
+15fb80d feat: Add support for custom Google domain in search settings
+772000b feat: Add support for Google AI (Gemini) as a custom model provider
+a3c76f0 feat: Change default keyboard shortcut to Ctrl+Shift+Q
+07949f5 feat: Bump extension version to 1.3.9
+216b21d Merge pull request #274 from n4ze3m/next
+8124490 feat: Improve system reset functionality in settings
+43b4f07 feat: Add more options for chat messages to copy, download chat entirely
+ccca2ea feat: Anonymize knowledge source content when marking as finished
+5b87173 feat: Update README to describe Page Assist as a browser extension
+fd6eea3 feat: Add Brave Search API support
+44e2057 feat: Update system reset functionality in settings
+caf1dfc feat: Clear all browser storage when deleting chat history and use local instead of sync
+143541e chore: bump version to 1.3.8
+2b08786 fix: update setLastUsedChatSystemPrompt calls to use newHistoryId.id
+9faeca9 Merge pull request #271 from n4ze3m/next
+dcd52ad feat: Set system prompt from last used chat prompt
+a027520 Merge pull request #270 from n4ze3m/next
+0566089 fix(sidepanel): Enable or disable Ollama connection status check
+071e5d4 chore: bump version to 1.3.7
+bd08526 feat: Add support for saving and restoring last used system prompt
+bd5b3f9 Merge pull request #262 from n4ze3m/next
+d45b279 feat: Add SaveButton component to CurrentChatModelSettings
+379ba69 feat: add error handling to SearXNG search provider
+0226de7 feat: Add vector search to SearXNG search provider chore: remove unnecessary type annotation in web.ts
+5687517 feat: Add save functionality for system prompt and model settings
+77f0cdb fix: remove generateHistory call from useMessage hook
+c8c71f6 feat: Add SearXNG search provider and settings
+138e41e chore: bump manifest version to 1.3.6
+6d80798 feat: Add useMMap option to model settings
+e5e04c3 feat: Add option to resume last chat when opening Web UI
+8d12e91 Merge pull request #260 from farooqpk/feature/ollama-url-input
+82246ed Merge pull request #258 from Abubakar115e/main
+38979d9 feat: Set Ollama URL from ollamaInfo in PlaygroundEmpty
+7f94d57 Merge branch 'n4ze3m:main' into main
+9b14710 Merge branch 'main' of https://github.com/Abubakar115e/page-assist
+2452259 docs(connection-issue): add steps to resolve Ollama connection issues - Add new steps to resolve Ollama connection issues when directly accessed from the browser extension - Instruct users to set `OLLAMA_HOST=0.0.0.0` environment variable and restart Ollama - Provide additional troubleshooting guidance for users still facing issues
+7e796e7 Merge pull request #251 from n4ze3m/next
+2c12b17 feat(vision): add vision chat mode - Add new "vision" chat mode to the application - Implement the `visionChatMode` function to handle vision-based chat interactions - Update the UI to include a new button to toggle the vision chat mode - Add new translations for the "vision" chat mode tooltip - Disable certain UI elements when the vision chat mode is active
+edc5380 feat(i18n): add Ukrainian translations for Playground and Settings
+0421f66 Merge pull request #254 from vlisivka/main
+73306d9 Ukrainian translation for Page Assist is added.
+eaf0e5b feat(NewChat): improve button styles and layout
+92013f3 feat(settings): add Ollama connection status check setting - Add new setting to enable/disable Ollama connection status check - Update translations for the new setting across all supported languages
+ca26e05 feat: Improve memory embedding and vector store handling
+64e88bd feat: Add support for chat mode in MessageSource component
+726d3e3 feat: Improve PageAssistSelect component
+c4d9e3a feat: Add page assist select component to header
+4292dc4 feat: Bump application version to 1.3.5
+dd6ef49 Merge pull request #242 from n4ze3m/next
+5678a0f feat: Add Korean language support
+a96193b feat: Add error handling for updating message by index
+0f75de0 Fix: Update temporary chat history
+55f3838 feat: Improve ollama2 model fetching
+2409ebc feat: Add Ollama and Llamafile to dynamic model fetching
+a7f461d feat: Add multiple Ollama  support
+c6a6212 feat: Add LlamaFile support
+f52e3d5 Fix: Handle image URLs in custom model responses
+9c7a3f5 fix: Prevent errors from optional fields in chat history and chunk content
+f8791a0 feat: Introduce temporary chat mode
+8fbdfc3 feat(settings): Use selected system prompt in current chat model temp system fallback
+88d0cb6 feat: Support for new AI capabilities
+977723f feat: Ability to send image without text
+fd654ca feat: Add max tokens setting for model generations
+7c805cf feat: Include generation info in message history
+9f383a8 feat: Add generation info to messages
+9ecc8c4 Merge pull request #238 from hkjang/korean-localization
+bbbc152 Small spell fixes
+f61ce71 add Koraen localization
+f803243 Merge pull request #235 from n4ze3m/next
+fcdfed6 Bump version to 1.3.3
+14ee927 Merge pull request #233 from n4ze3m/next
+29169f8 feat: Add support for LaTeX environments
+55e22eb Fix: Improve LaTeX preprocessing logic
+65ba2ff feat: add save and send functionality for user message
+31ca246 feat: update LaTeX processing
+9f1873d feat: Improve download button placement
+9089653 Fix: Handle PDF content in Firefox
+3a1ed7a feat: Add Swedish language support
+c5f0920 Merge pull request #231 from PierreMesure/swedish-translations
+8a6dc51 Minor formatting fixes on other languages
+1564750 Add Swedish translation
+9e49215 Bump version to 1.3.2
+66909a9 Merge pull request #224 from n4ze3m/next
+39014fc Fix: Capitalize "last7Days" label
+0a15e83 Merge pull request #218 from n4ze3m/next
+be3f627 feat: Add model download button to Hugging Face website
+eb643b7 Fix: Update placeholder text for model input
+d5df8b5 feat: add pin/unpin functionality to chat history
+f01f9d0 feat: Remove language detection
+9cc309e feat: Add code download functionality
+a2f9002 feat: enhance playground UI
+7be993c feat: Add HTML preview to code blocks
+fd5339d Bump version to 1.3.1
+4551ac6 Merge pull request #209 from n4ze3m/next
+d5902dd Fix: Add missing step to resolve connection issue
+d9dc186 Merge pull request #197 from n4ze3m/openai
+b9973bb feat: Add OpenAI API provider support
+0ea69af feat: Display model name in knowledge settings
+d64c84f feat: Implement Ollama embedding
+ff4473c feat: Add model type support
+4e04155 Fix: Update dependencies and documentation
+d83ba79 refactor add modal
+405adc0 Merge remote-tracking branch 'origin/next' into openai
+18c3673 Merge pull request #208 from Abubakar115e/main
+4b4036e Refactor: OpenAI settings UI & language
+30eb320 Fix: Improve settings layout and models refresh
+768ff2e feat: Improve model selection and embedding
+ba071ff add embedding support
+1300945 Fix: Prevent model selection modal from appearing for LM Studio provider
+ddb8993 feat: Support LMStudio models
+f1e40d5 feat: Add OpenAI provider support
+acce9b9 feat: Improve UI for loading OpenAI models
+ff371d6 feat: Add OpenAI Provider Selection
+d2c5785 Added more language to support auto browser recognition
+41b11e8 Merge branch 'main' of https://github.com/Abubakar115e/page-assist
+6fc2931 spell issues
+ec33015 Maybe it works?
+718e1c8 Spell
+d3ccbbf spell fix
+46d2e6a Norwegian langauge support, but I need to do some small fixes
+832c565 n4ze3m you can now merge the two git branches
+43a88ab Everythings works for Danish now
+7b26e64 Danish language support is fully functioning
+4363ac1 Added support for Danish Language
+3d8c867 Merge remote-tracking branch 'origin/next' into openai
+2a2309d Merge pull request #196 from n4ze3m/next
+1ec44f0 feat(share): Add history title to share modal
+0e44a7a feat: Add temporary system prompt
+caeb923 Fix: Remove debugging log statement
+efec675 Fix: Replace empty API keys with temporary placeholder
+d751033 Bump version to 1.3.0
+192e389 feat: support custom models for messages
+c862063 feat: add OpenAI model support
+2a2610a feat: add model management UI
+e2e3655 feat: OpenAI settings page
+2e97f64 feat: Add clear chat history button to drawer
+70fc095 Merge pull request #183 from n4ze3m/next
+53d999a feat: Add system and quick prompts on side panel
+5602714 Fix: Extend content script scope to all of ollama.com
+e44c479 feat: Remove unnecessary memoization
+824ecf0 feat: Add LaTeX support to the markdown renderer
+0542b8a Merge pull request #174 from n4ze3m/next
+c077201 feat: Migrate Chrome AI integration to a separate module
+33702f0 feat: Add German language support
+3f61c6a feat: Add citations display to playground message
+9bd3193 fix: Improve ChromeAI model parameters
+26e799b Merge pull request #179 from colin-campbell/stt-to-storage
+aa92670 Merge branch 'next' of https://github.com/n4ze3m/page-assist into next
+13cbc5b stt-to-storage: UX - Move speechToText from state to storage.
+a87b5b3 Merge pull request #176 from colin-campbell/headers-api-everywhere
+ca2c127 headers-api-everywhere: Add headers to all api calls
+95a4d9f headers-api-everywhere: Add headers to all api calls
+eed0f7c chore: Update Twitter handle in AboutApp component
+9679f92 feat: Add support for handling chat input keydown events
+788d6c9 Merge pull request #171 from n4ze3m/next
+35b8579 feat: Add Number of Retrieved Documents on RAG
+564b137 chore: Update default file upload limit labels and placeholders for multiple locales
+4ef17ff feat:  support for GPU layer
+00735cd feat: Update context menu options with localized titles
+d5a0136 chore: Update wxt npm dependency to version 0.19.6
+3a05008 chore: Update wxt npm dependency to version 0.19.6
+066db5d Merge pull request #164 from n4ze3m/next
+5557ef3 refactor: Remove unused import in PlaygroundForm component
+8bbb3c1 refactor: Improve textarea focus behavior in PlaygroundForm component
+f6d7020 feat: Add AI-based title generation feature
+44da2db feat: Add segmented control for custom and copilot prompts in PromptBody component
+fa42f71 Merge pull request #165 from asedmammad/feat/add-persian-i18n
+f1214f3 i18n: Add persian (farsi)
+eccf8f8 feat: Enable title generation in GeneralSettings component
+48a4af5 feat: Add context menu options for summarizing, rephrasing, translating, and explaining text selections in background.ts
+36fc8b6 feat: Add segmented control for custom and copilot prompts in PromptBody component
+6c44fcf feat: Remove 'managePrompts.columns.actions' title from PromptBody component
+2cc880c feat: Add missing text placeholder in prompt help messages for different locales
+1bb6d3a feat: Add tag colors for custom and copilot prompts in PromptBody component
+80413a3 feat: Add segmented control for custom and copilot prompts in PromptBody component
+58304d9 feat: Update translations for copilot context menu options
+ac9c9ca feat: copilot context menu for tool
+325913c Merge pull request #153 from n4ze3m/next
+9c7ebc8 fix: delete model error notification
+df3484b feat: Truncate long titles in PromptBody component and improve rendering of system and quick prompts
+b12cf55 chore: Update SelectedKnowledge component styling and truncate long titles
+440ecf8 feat: Refactor useMessage hook for website embedding options and improvements
+57c02bc feat: Add sidepanelRag settings for Copilot chat with website
+9521707 feat: Update useMessage hook with website embedding options and improvements
+498f4a0 feat: Improve content extraction with readability library
+af09c8e feat: ability to update knowledge base default file limit
+abc9a0c Merge pull request #137 from n4ze3m/next
+943813f feat: Add notification support for knowledge base processing
+e7b70e5 feat: Update status color for failed knowledge processing
+79e5113 feat: Add failed status to knowledge processing
+cecb447 chore: Add error handling and processing status flag to knowledge queue subscription
+9c8584f feat: Add support for sending notification after knowledge base processing
+f5f0157 fix: scroll issue playground
+15f29de Merge branch 'main' into next
+6ed6baa Merge pull request #141 from thiagojramos/main
+b9853cd Complete Review of pt-BR Localization Strings
+a582a72 feat: Add i18n support for restoring last used model in previous chats
+031e74f feat: Add option to restore last used model for previous chats
+c80ef8b chore: Bump manifest version to 1.1.15
+7bb036a Merge pull request #134 from josx/spanish_translation_fix
+1248f9d feat fix: add spanish translation
+0fa17ec Merge pull request #132 from n4ze3m/next
+3a4821a feat: Add Chrome AI provider and update README.md
+79da928 add chrome ai settings i18n
+d41ec2a feat: Add Chrome AI support
+52f9a29 feat: Add custom headers support
+86296c9 chrome ai model
+a5de970 chore: Update manifest version to 1.1.14
+ba654f9 Merge pull request #129 from n4ze3m/next
+885d938 add rerank
+d6d28b3 refactor: Update similaritySearch parameter to use 4 instead of 3
+5ac03f5 refactor: Update useScrollAnchor to handle user scrolling and overflow
+1e9b66d refactor: Update PageAssistHtmlLoader to use extractReadabilityContent for parsing web page content
+4363a4b feat: Add localization support for visitSpecificWebsite label
+d23b70b feat: Add @mozilla/readability dependency for extracting content from web pages
+56cea30 Merge pull request #128 from josx/spanish_translation
+d4e0267 i18n: initial spanish translation
+d198b87 Merge pull request #119 from n4ze3m/next
+f131069 refactor: Update font-weight and border width for consistent styling
+d32f133 refactor: Update font-family to Arimo and add font-weight and font-style for consistent styling
+8b2e2ba refactor: Update font-family to Arimo for better readability and consistency
+dc5ccd4 refactor: Update SidepanelForm to handle drag and drop functionality
+69ba305 feat: Add react-icons and PiGlobe icon to PlaygroundForm and SidepanelForm
+52ccbc6 feat: Add rehype-katex dependency for rendering math equations in Markdown
+68bd3e6 refactor: Update version to 1.1.12, fix selectedModel spacing, and update meta viewport tags
+8bcd4ec Merge pull request #109 from n4ze3m/next
+4a5713d refactor: Remove unnecessary flex classes from CodeBlock component
+56b7121 refactor: Update RAG settings labels and help messages
+c701e2f refactor: Update embedding model settings page references in locale files
+bd9e198 feat: Add Discord and Twitter links to AboutApp component
+692c088 new settings for rag
+ca30198 Merge pull request #108 from lucianotonet/add-pt-locale
+b3d9f3c Merge branch 'next' into add-pt-locale
+2c8aa3b feat: Add Brazilian Portuguese language support
+7fa44e6 refactor: Remove unnecessary flex classes from main element in Layout component
+b6bc617 refactor header
+f12523d feat: Add useScrollAnchor hook for scrolling functionality
+024d050 feat: Add CodeBlock component for syntax highlighting in Markdown
+3161367 feat: Add French language translation
+1b7cc53 chore: Update dependency management tool to Bun
+f51a67a Merge pull request #105 from lambirou/main
+4244492 Merge branch 'next' into main
+e8bbc5d feat ✨: Add French Language
+f5b0cc2 chore: Update save button styling in EditMessageForm
+387c158 feat: Add Italian language translation
+721fad1 chore: Update Layout component to adjust width for model selection
+620b2b8 chore: Update package.json build command for Firefox
+533e38c chore: Update Layout component to truncate long model names
+01b2d6b Merge pull request #100 from adrianoamalfi/Italian-language
+c186b71 feat ✨: Add Italian Language
+3868048 Merge pull request #98 from n4ze3m/next
+d5f7d0a fix
+0e29354 Merge pull request #97 from n4ze3m/next
+f9f4810 feat: Add react-speech-recognition for speech-to-text functionality in SidepanelForm
+014565a feat: Add BetaTag to Copilot resume chat label in SettingsOther component
+3104409 chore: Remove BetaTag import from SettingsBody component
+25cb97d feat: Add Copilot resume chat and hide current chat model settings
+2343531 feat: Add localization support for Copilot resume chat and hide current chat model settings
+961f518 Added ability to resume previous chat on copilot
+9e2ef72 chore: Update Lucide icons and improve Current Chat Model Settings
+2a7d34f chore: Update SidepanelForm to include chat mode checkbox for normal and rag modes
+8899a42 feat: Add support for Mammoth library for docx file uploads
+845b725 feat: Add support for Brave search provider
+11f5eba chore: Update Lucide icons and improve Current Chat Model Settings
+315163c chore: Update Lucide icons and add Current Chat Model Settings to Sidepanel
+fadf736 refactor: Parse keepAlive value in OllamaEmbeddingsPageAssist
+b3a4553 chore: Update version to 1.1.9 and add Model Settings to Ollama settings page
+d2afcc6 chore: Update README with Discord chat link and badge
+dfaffa0 Merge pull request #70 from n4ze3m/next
+b87e91b chore: Add advanced Ollama settings to the Settings page
+c4a249a chore: Update README with blogs and videos about Page Assist
+8662fd0 chore: Update form components to handle pasted files
+e623cc5 Update form components to handle pasted files
+160927a chore: Refactor Sidepanel Chat body and form components
+d28525a chore: Update Sidepanel UI styling and manifest configuration
+d6fff4b chore: Refactor deleteChatHistory method to deleteAllChatHistory
+182f914 chore: Update README with blogs and videos about Page Assist
+1b69ad9 Merge pull request #74 from vcappuccio/fix/race-condition
+128bf57 Fix Incorrect Method Call and Potential Race Condition in src/db/index.ts
+eb40411 Merge remote-tracking branch 'origin/main' into next
+579d8ea Merge pull request #73 from n4ze3m/readme-update
+96c5096 chore: Update README
+0ce0675 chore: Add description for executing action in Web UI
+a4ee6b3 chore: Update page share feature description
+3170bc4 chore: Update shareMode default value to false
+a4a684f Merge pull request #64 from n4ze3m/next
+8f8fac8 chore: Update gecko ID for Firefox support
+4f98ed7 chore: Update manifest name for Firefox support
+b75e5a1 chore: Update README with manual installation instructions for Ollama
+44dd95c chore: Update README with manual installation instructions for Ollama
+b908e67 chore: Remove unused Skeleton import in index.tsx
+084dc57 chore: Update page loading fallback components
+e6cf76d chore: Refactor route components for better organization and consistency
+79f3146 fix: Update Ollama connection issue link in SettingsOllama component
+26fc5b4 feat: Enable Firefox support and update browser compatibility table
+db7b49e chore: Update .gitignore to include .idea folder
+5984959 feat: Add advanced configuration options for Ollama URL
+d902414 feat: Add connection error message for Ollama in multiple locales
+e94edf5 chore: Update URL rewrite logic for runtime
+62ffe83 chore: Update logic of runtime url rewrite
+bd84b90 Merge pull request #63 from n4ze3m/firefox
+79e2013 few bug fixes
+f9f621c chore: Update .gitignore and add .idea folder, update npm dependencies, and improve code logic for chat history and knowledge export/import
+b982ce1 Merge pull request #60 from n4ze3m/next
+677aa6e feat: Add export/import functions for chat history, promt and knowledge
+11147fd chore: Update npm dependency versions and add export/import functions for chat history and knowledge
+88ad1fc feat: Add ModelSelect component to SidepanelForm
+f630add refactor: Update handlePromptChange logic to handle undefined value
+f389e45 chore: Update message display logic to include cursor indicator
+914e358 Merge pull request #51 from n4ze3m/next
+0f547d8 Add Russian lang
+b09fbcd Option to disable page share
+ad5601a Add Sogu as search engine
+ca1a6e9 Auto config fonts
+0173a7f Merge pull request #50 from FerNikoMF/main
+1775b64 added Russian language
+e73a416 Merge pull request #47 from n4ze3m/next
+69809c9 Merge branch 'next' of https://github.com/n4ze3m/page-assist into next
+cbea863 Fix whitespace formatting in Markdown.tsx, Message.tsx, useMessage.tsx, and useMessageOption.tsx
+df8bdd7 Merge pull request #43 from hyzx86/next
+6557510 update ignore
+50d4ae4 Merge pull request #41 from n4ze3m/next
+49d7f33 Add useStorage hook to remember recently used model
+cfcf718 Remeber recently used model
+559e89c Merge branch 'next' of https://github.com/n4ze3m/page-assist into next
+91166a2 Merge remote-tracking branch 'origin/main' into next
+d479283 Merge pull request #38 from hyzx86/addMd
+5089bb5 Add support markdown
+aeefb00 Update localization messages for Chinese, English, and Japanese languages and fix whitespace formatting in isTTSEnabled function in tts.ts
+c914233 Update dependencies and fix whitespace formatting in isTTSEnabled function in tts.ts
+476323d Fix whitespace formatting in isTTSEnabled function in tts.ts
+fd171ab Fix isSSMLEnabled function in tts.ts
+9eaa0c9 Update localization messages for Chinese, English, and Japanese languages
+36c1cae Update localization messages for Chinese, English, and Japanese languages
+28887e9 Fix link decoding issue in local-duckduckgo.ts
+9262a5b Update import statements, set TTSEnabled in TTSModeSettings, and fix fetchChatModels error handling
+a3810cd Update import statement in local-duckduckgo.ts, prompt.tsx, wxt.config.ts, webui.tsx, PlaygroundChat.tsx, other.tsx, Markdown.tsx, and useMessageOption.tsx
+291f739 Fix import statement in background.ts
+be11b72 Update package.json scripts and remove unused documentation commands
+bc109d9 Add documentation scripts and commands
+e96a579 Update localization files and remove unused files
+0ec5621 Update SettingsOptionLayout to include Tag component in link name
+8e429e2 Update KnowledgeIcon size in MessageSource.tsx
+d6d2eae knownledge preview
+0de5ea0 Add d3-dsv and @types/d3-dsv dependencies
+82abbf5 Add SelectedKnowledge component to OptionLayout and KnowledgeSelect
+dd496b7 Webui chat with x added
+aae2dde Update useMessageOption hook and Playground component
+b86332f Update Ollama system prompt in ollama.ts
+0e59aa7 Refactor AboutApp component in about.tsx
+ac347a3 Update dependencies and fix import paths
+9a7b4f4 Merge pull request #32 from n4ze3m/next
+d91d4c4 Rename folder
+920e4a7 Remove Chinese translations
+7b5062e Add about section to settings.json for multiple locales
+e29cea8 Update background.ts and settings.json
+9ced646 Added Web search DuckDuckGo
+317011a Add OllamaIcon to OptionLayout and update styles
+ea56a2f Add localization for manage search feature
+12558c3 Update icon in SettingsOptionLayout.tsx
+359074a Update page-share.md
+bac85dd Add support for Japanese language
+f7b7bb0 Merge pull request #25 from n4ze3m/next
+dc63436 add zh-CN
+f5eca6a Update localization strings and settings
+65774fe Merge pull request #24 from Mindires/main
+338863a create Chinese translation
+4f933c9 Merge pull request #23 from n4ze3m/next
+3b0a306 Update localization messages in ml locale
+628d877 Refactor tailwind.config.js
+889de61 Fix bug in login functionality
+3904a74 Refactor useMessage hook and remove unused code
+2381588 Update dependencies and refactor useMessage hook
+01d27fd i18n support
+3143dd3 Add width style to language select
+502759f Update language files and fix UI issues
+d9ce1e2 Add new translations and update existing ones
+9a2adbd Add i18n
+4055231 Merge pull request #22 from n4ze3m/wxt
+b33ee03 Migrated to WXT
+2130bb7 Merge pull request #19 from n4ze3m/next
+4aff7f9 Update package version and add hideEditAndRegenerate prop
+78c44e1 Add edit functionality to PlaygroundMessage component
+5b04e55 Refactor message appending logic in useMessageOption hook
+912e6c8 Merge pull request #16 from n4ze3m/next
+00bd193 Fix styling issues in various components
+b7e940d Update default Page Share URL
+2c96757 Add Page Share feature and instructions for self-hosting
+b101706 Add currentURL and setCurrentURL to useMessage hook
+7ce79bb Add ShareBtn component and update SettingsOptionLayout
+3eabe10 Update browser support table
+7a72961 Update dependencies and add YouTube transcript support
+6d559ed Add onCompositionStart and onCompositionEnd event handlers to message input
+8778129 Update package.json version and add typing state to SidepanelForm
+faea2b2 Add typing state to PlaygroundForm component
+77c1fd6 Merge pull request #12 from n4ze3m/next
+21ab18d Refactor prompt icons and add navigation to clearChat
+1b689c9 Add search mode settings and textarea focus on form submission
+a87c560 Update component imports and add conditional focus in PlaygroundForm
+0351bee Delete unused files and update API calls
+e0c2c0c Remove console.log statements and unused dependencies
+88e7e75 Update OptionLayout component and add OptionPrompt route
+4365580 Refactor SidepanelForm component
+bfc8c5c Update package.json version and fix text area focus bug
+b1ea19f Merge pull request #8 from n4ze3m/next
+40a6f0d Update package.json version and refactor service calls
+c8a2387 Merge pull request #6 from n4ze3m/next
+03db463 Fix dropdown filter bug and add save button animation
+0946154 Add @mantine/hooks dependency and update PlaygroundChat component
+86d4d53 Update Lucide icons imports
+43f3727 Add lucide-react package and remove unused icons
+06b3217 Add dependencies and update code for PDF parsing and searching
+f87953b Delete and Update History
+1c980c4 Update dependencies and import paths
+743f8d4 Add location information to README
+71a2b76 Merge pull request #5 from n4ze3m/next
+7b41587 Update package.json version to 1.0.2
+ecbff60 manage model
+d763c28 Remove unused dependencies and update routing
+8e6cd7e Add streamDownload function and handle model pull in background.ts
+aabb650 Merge pull request #4 from n4ze3m/next
+d7c8553 Add key prop to Image component and update speechToTextLanguage state
+31730ca new changes
+31cac3b Update package version and add new chat button
+e4011b7 Add support and sponsorship options
+6cf70bf Update README.md with new features and installation instructions
+8a24faf Merge pull request #2 from n4ze3m/v2
+5eae634 Update package.json with new display name and description
+2ae8338 Update README with Ollama web UI feature
+f90df7a Update sidepanel styles
+b54527c Add deleteChatHistory method to PageAssitDatabase class and systemPromptForNonRagOption functions to ollama service
+c1efb2d Update PlaygroundForm and Sidebar components
+5896635 Update dependencies and fix styling issues
+a66d8a8 Update package.json and code files
+5958e10 Add Sidepanel Settings Body component and update button styles in EmptySidePanel component
+be3a4ed Add @langchain/core dependency and update imports*** ***Update SidepanelRouting to use dark mode*** ***Add image support to PlaygroundMessage component
+e6130f1 Update dependencies and add dark mode support
+4c17d2f Fix UI issues and add embedding feature
+84f4205 Add chat mode functionality to EmptySidePanel component
+28361c4 Add RAG
+23e4887 Update SidepanelChat imports and add SidepanelSettingsHeader route
+ca84cc3 Add name property to Message type
+0aa4aef v2 initial commit
+43439e5 i messed up dockerfile
+c2dacfc oops
+2c0cf41 update dockerfile with gunicorn
+71a4c89 demo added
+45b38ce licence added
+49eb459 readme updated
+9401a65 demo link updated
+0111b16 new changes
+5d58735 new changes
+5d8c2c8 landing page added
+92cb203 new changes
+4efc9e0 chat ui added
+1c7b4c3 new changes
+2c87aa3 new changes
+e94092e use chromadb
+dd2d3b1 new changes in extension
+34efe64 add tiktoken
+00e6d71 added supabase
+a3535bb extension code updated
+6bc176e new changes
+8c6c609 add verify token
+dba761d basic settings added
+2c66e38 new changes
+6a204ce ok build now
+9529903 build ??????
+6fd1b14 work
+89f17d8 work
+1257437 :|
+f935660 plss build
+2c08175 new changes
+241745d new changes
+a3ebeb8 initial extension
+012035e basic server added
+6ee45e7 Initial commit
