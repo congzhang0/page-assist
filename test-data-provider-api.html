@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Assist 数据提供者API测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .test-section {
+            margin: 20px 0;
+        }
+        #results {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-top: 20px;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .troubleshooting {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .troubleshooting h3 {
+            margin-top: 0;
+        }
+        .troubleshooting ul {
+            padding-left: 20px;
+        }
+        .steps {
+            counter-reset: step;
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .steps li {
+            position: relative;
+            padding-left: 35px;
+            margin-bottom: 10px;
+        }
+        .steps li:before {
+            content: counter(step);
+            counter-increment: step;
+            position: absolute;
+            left: 0;
+            width: 25px;
+            height: 25px;
+            line-height: 25px;
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Page Assist 数据提供者API测试</h1>
+    
+    <div class="note">
+        <p><strong>注意：</strong>此测试页面必须在已安装Page Assist扩展的Chrome浏览器中打开才能正常工作。确保扩展已启用并配置了数据提供者API。</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>环境检查</h2>
+        <p>在运行测试前，请先检查环境是否正确配置：</p>
+        <button id="checkEnvironment">检查环境</button>
+        <button id="checkExtension">检查扩展连接</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>全部测试</h2>
+        <button id="testAll">运行所有测试</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>单项测试</h2>
+        <button id="testPageCount">获取页面计数</button>
+        <button id="testPagesList">获取页面列表</button>
+        <button id="testGetPage">获取单个页面</button>
+        <button id="testGetTags">获取所有标签</button>
+        <button id="testSync">同步数据</button>
+        <button id="testChanges">获取变更记录</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>结果</h2>
+        <pre id="results">// 测试结果将显示在这里</pre>
+    </div>
+    
+    <div class="troubleshooting">
+        <h3>故障排除指南</h3>
+        
+        <div class="error">
+            <p><strong>常见错误：</strong> Cannot read properties of undefined (reading 'sendMessage')</p>
+            <p>这意味着脚本无法访问chrome.runtime.sendMessage方法，通常是环境问题导致的。</p>
+        </div>
+        
+        <h4>可能的原因和解决方案：</h4>
+        <ol class="steps">
+            <li><strong>使用正确的浏览器</strong><br>确保使用Chrome或基于Chromium的浏览器（如Edge）。</li>
+            <li><strong>不要直接打开本地文件</strong><br>Chrome的安全限制不允许本地HTML文件通过file://协议直接与扩展通信。请通过以下方式之一访问测试页面：
+                <ul>
+                    <li>使用Web服务器（如http-server、Python的SimpleHTTPServer等）</li>
+                    <li>将这些文件上传到已部署的网站</li>
+                    <li>或者直接将测试代码粘贴到Chrome扩展的DevTools控制台中运行</li>
+                </ul>
+            </li>
+            <li><strong>检查扩展是否安装并启用</strong><br>确认Page Assist扩展已正确安装并启用。可以在Chrome的扩展页面（chrome://extensions/）中查看。</li>
+            <li><strong>验证扩展ID</strong><br>确认脚本中使用的扩展ID是否正确。当前使用的ID是：<code>ffiigpcapfgmbpcggdfklpikceehbffd</code></li>
+            <li><strong>检查权限配置</strong><br>确保Page Assist扩展允许外部连接，特别是对当前域名的连接权限。这通常在扩展的manifest.json中的externally_connectable字段中配置。</li>
+            <li><strong>通过控制台运行</strong><br>如果以上方法都不奏效，请尝试直接在已打开的网页（可以是任何网页，如Google主页）的控制台中运行测试脚本：
+                <ol>
+                    <li>打开一个网页，如https://www.google.com/</li>
+                    <li>按F12打开开发者工具</li>
+                    <li>切换到控制台标签</li>
+                    <li>复制test-data-provider-api.js中的代码并粘贴到控制台中</li>
+                    <li>输入window.testApi()运行测试</li>
+                </ol>
+            </li>
+        </ol>
+    </div>
+    
+    <script src="test-data-provider-api.js"></script>
+    <script>
+        // 显示测试结果的函数
+        function displayResult(result) {
+            const resultsElement = document.getElementById('results');
+            if (typeof result === 'object') {
+                resultsElement.textContent = JSON.stringify(result, null, 2);
+            } else {
+                resultsElement.textContent = result;
+            }
+        }
+        
+        // 测试处理函数
+        async function runTest(testFn, args = []) {
+            const resultsElement = document.getElementById('results');
+            resultsElement.textContent = '正在运行测试...';
+            
+            try {
+                const result = await testFn(...args);
+                displayResult(result);
+                return result;
+            } catch (error) {
+                displayResult(`测试失败：${error.message}`);
+                console.error('测试失败:', error);
+            }
+        }
+        
+        // 存储页面ID用于单页面测试
+        let lastPageId = null;
+        
+        // 初始化页面事件
+        document.addEventListener('DOMContentLoaded', () => {
+            // 环境检查
+            document.getElementById('checkEnvironment').addEventListener('click', () => {
+                const envError = window.checkEnvironment();
+                if (envError) {
+                    displayResult(`环境检查失败：\n${envError}`);
+                } else {
+                    displayResult('✅ 环境检查通过: Chrome API可用');
+                }
+            });
+            
+            // 检查扩展连接
+            document.getElementById('checkExtension').addEventListener('click', async () => {
+                displayResult('正在检查扩展连接...');
+                const extError = await window.checkExtension();
+                if (extError) {
+                    displayResult(`扩展连接检查失败：\n${extError}`);
+                } else {
+                    displayResult('✅ 扩展连接检查通过: 可以成功连接到Page Assist扩展');
+                }
+            });
+            
+            // 运行所有测试
+            document.getElementById('testAll').addEventListener('click', () => {
+                runTest(window.testApi);
+            });
+            
+            // 获取页面计数
+            document.getElementById('testPageCount').addEventListener('click', () => {
+                runTest(window.getPageCount);
+            });
+            
+            // 获取页面列表
+            document.getElementById('testPagesList').addEventListener('click', async () => {
+                const result = await runTest(window.getPages, [{ pageSize: 5 }]);
+                if (result && result.pages && result.pages.length > 0) {
+                    lastPageId = result.pages[0].id;
+                    console.log(`已保存第一个页面ID: ${lastPageId}`);
+                }
+            });
+            
+            // 获取单个页面
+            document.getElementById('testGetPage').addEventListener('click', async () => {
+                if (!lastPageId) {
+                    displayResult('请先运行"获取页面列表"测试获取页面ID');
+                    return;
+                }
+                runTest(window.getPage, [lastPageId]);
+            });
+            
+            // 获取所有标签
+            document.getElementById('testGetTags').addEventListener('click', () => {
+                runTest(window.getAllTags);
+            });
+            
+            // 同步数据
+            document.getElementById('testSync').addEventListener('click', () => {
+                runTest(window.syncData, [0, true]);
+            });
+            
+            // 获取变更记录
+            document.getElementById('testChanges').addEventListener('click', () => {
+                runTest(window.getChanges, [0]);
+            });
+        });
+    </script>
+</body>
+</html> 

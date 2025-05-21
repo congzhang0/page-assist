@@ -8,6 +8,7 @@ import { TTSModeSettings } from "./tts-mode"
 import { useStorage } from "@plasmohq/storage/hook"
 import { SystemSettings } from "./system-settings"
 import { SSTSettings } from "./sst-settings"
+import { useMessage } from "~/hooks/useMessage"
 
 export const GeneralSettings = () => {
   const [userChatBubble, setUserChatBubble] = useStorage("userChatBubble", true)
@@ -25,6 +26,9 @@ export const GeneralSettings = () => {
     "defaultChatWithWebsite",
     false
   )
+  
+  // 与当前页面聊天设置
+  const { chatMode, setChatMode } = useMessage()
 
   const [restoreLastChatModel, setRestoreLastChatModel] = useStorage(
     "restoreLastChatModel",
@@ -110,6 +114,17 @@ export const GeneralSettings = () => {
         <Switch
           checked={defaultChatWithWebsite}
           onChange={(checked) => setDefaultChatWithWebsite(checked)}
+        />
+      </div>
+      <div className="flex flex-row justify-between">
+        <div className="inline-flex items-center gap-2">
+          <span className="text-gray-700   dark:text-neutral-50">
+            {t("common:chatWithCurrentPage")}
+          </span>
+        </div>
+        <Switch
+          checked={chatMode === "rag"}
+          onChange={(checked) => setChatMode(checked ? "rag" : "normal")}
         />
       </div>
       <div className="flex flex-row justify-between">

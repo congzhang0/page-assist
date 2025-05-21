@@ -449,20 +449,6 @@ export const SidepanelForm = ({ dropedFile }: Props) => {
                                 key: 2,
                                 label: (
                                   <Checkbox
-                                    checked={chatMode === "rag"}
-                                    onChange={(e) => {
-                                      setChatMode(
-                                        e.target.checked ? "rag" : "normal"
-                                      )
-                                    }}>
-                                    {t("common:chatWithCurrentPage")}
-                                  </Checkbox>
-                                )
-                              },
-                              {
-                                key: 3,
-                                label: (
-                                  <Checkbox
                                     checked={useOCR}
                                     onChange={(e) =>
                                       setUseOCR(e.target.checked)

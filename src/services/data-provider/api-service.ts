@@ -19,477 +19,565 @@ import {
   getChangesSince,
   getLastChangeTime
 } from './change-tracker';
-import { getDataProviderConfig } from '@/config/data-provider-config';
+import { getDataProviderConfig, isDataProviderEnabled, validateAccessToken, DataProviderConfig } from '@/config/data-provider-config';
+import { SavedPagesDB } from '@/db/savedPages';
+import type {
+  ApiRequest,
+  ApiResponse,
+  Page,
+  Document,
+  Model,
+  Knowledge,
+  Vector,
+  Message,
+  Change,
+  EntityData,
+} from '@/types/data-provider'; // Assuming these types exist or will be created
 
-// API请求接口
-export interface ApiRequest {
-  // 请求类型
-  type: 'get' | 'list' | 'sync' | 'count' | 'tags' | 'changes';
-  
-  // 实体类型
-  entityType: 'document' | 'model' | 'knowledge' | 'vector' | 'message' | 'page';
-  
-  // 实体ID（用于get请求）
-  id?: string;
-  
-  // 查询参数（用于list请求）
-  query?: {
-    // 过滤条件
-    filter?: Record<string, any>;
-    
-    // 分页
-    page?: number;
-    pageSize?: number;
-    
-    // 排序
-    sort?: {
-      field: string;
-      order: 'asc' | 'desc';
-    };
-    
-    // 搜索
-    search?: string;
-    
-    // 字段选择
-    fields?: string[];
-  };
-  
-  // 同步参数（用于sync和changes请求）
-  sync?: {
-    // 上次同步时间
-    lastSyncTime?: number;
-    
-    // 是否全量同步
-    fullSync?: boolean;
-    
-    // 最大返回记录数
-    maxRecords?: number;
-  };
-  
-  // 客户端标识（可选）
-  clientId?: string;
-  
-  // 访问令牌
-  accessToken: string;
-}
+const SERVICE_NAME = 'DataProviderAPI';
 
-// API响应接口
-export interface ApiResponse {
-  // 响应状态
-  success: boolean;
-  
-  // 错误信息（如果有）
-  error?: {
-    code: string;
-    message: string;
-  };
-  
-  // 响应数据
-  data?: any;
-  
-  // 元数据
-  meta?: {
-    // 总记录数
-    total?: number;
-    
-    // 分页信息
-    page?: number;
-    pageSize?: number;
-    pageCount?: number;
-    
-    // 同步信息
-    syncTime?: number;
-    hasMore?: boolean;
-    
-    // 客户端信息
-    clientId?: string;
-    
-    // 服务器时间
-    serverTime?: number;
-  };
+/**
+ * Initializes the Data Provider API listeners.
+ * This should be called from the background script.
+ */
+export function initDataProviderAPI(): void {
+  if (chrome.runtime.onMessageExternal.hasListener(externalApiRequestListener)) {
+    logger.warn(`[${SERVICE_NAME}] External API request listener already registered.`);
+  } else {
+    chrome.runtime.onMessageExternal.addListener(externalApiRequestListener);
+    logger.info(`[${SERVICE_NAME}] External API request listener registered.`);
+  }
 }
 
 /**
- * 处理API请求
- * @param request API请求
- * @param appId 应用ID
+ * Handles incoming messages from external web apps.
  */
-export async function handleApiRequest(request: ApiRequest, appId: string): Promise<ApiResponse> {
-  try {
-    logger.debug('处理API请求', {
-      type: request.type,
-      entityType: request.entityType,
-      appId,
+function externalApiRequestListener(
+  request: any,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response: ApiResponse) => void,
+): boolean {
+  logger.debug(`[${SERVICE_NAME}] Received external request`, { sender, request });
+
+  // Basic validation of the request structure
+  if (!request || typeof request.type !== 'string' || typeof request.entityType !== 'string') {
+    logger.error(`[${SERVICE_NAME}] Invalid request structure:`, request);
+    sendResponse({
+      success: false,
+      error: {
+        code: 'invalid_request',
+        message: 'Invalid request structure. \'type\' and \'entityType\' are required.',
+      },
+      meta: { serverTime: Date.now() },
     });
-    
-    // 验证请求
-    const validation = await validateApiRequest(request.accessToken, appId);
-    if (!validation.valid) {
-      const response: ApiResponse = {
+    return false;
+  }
+
+  const apiRequest = request as ApiRequest;
+
+  // Process asynchronously
+  (async () => {
+    try {
+      const response = await handleDataProviderRequest(apiRequest, sender);
+      sendResponse(response);
+    } catch (error: any) {
+      logger.error(`[${SERVICE_NAME}] Unhandled error processing request:`, error);
+      sendResponse({
         success: false,
         error: {
-          code: validation.error || 'unauthorized',
-          message: getErrorMessage(validation.error || 'unauthorized'),
+          code: 'internal_error',
+          message: error.message || 'An unexpected error occurred.',
         },
-        meta: {
-          serverTime: Date.now()
-        }
-      };
-      
-      // 记录访问日志
-      await logApiAccess(appId, request, response);
-      
-      return response;
+        meta: { serverTime: Date.now() },
+      });
     }
-    
-    // 检查实体类型是否允许
-    const config = await getDataProviderConfig();
-    if (!config.filters.allowedEntityTypes.includes(request.entityType)) {
-      const response: ApiResponse = {
+  })();
+
+  return true;
+}
+
+/**
+ * Main handler for all data provider requests.
+ * Validates permissions and routes to specific entity handlers.
+ * @param request The API request object.
+ * @param sender The message sender object.
+ * @returns A promise resolving to an ApiResponse.
+ */
+export async function handleDataProviderRequest(
+  request: ApiRequest,
+  sender: chrome.runtime.MessageSender,
+): Promise<ApiResponse> {
+  const config = await getDataProviderConfig();
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
+
+  if (!config.enabled) {
+    logger.warn(`[${SERVICE_NAME}] API is disabled. Rejecting request.`);
+    return {
+      success: false,
+      error: { code: 'api_disabled', message: 'Data Provider API is disabled.' },
+      meta,
+    };
+  }
+
+  if (typeof request.accessToken !== 'string' || !(await validateAccessToken(request.accessToken))) {
+    logger.warn(`[${SERVICE_NAME}] Invalid access token. Rejecting request.`);
+    return {
+      success: false,
+      error: { code: 'auth_invalid_token', message: 'Invalid access token.' },
+      meta,
+    };
+  }
+
+  if (!config.filters.allowedEntityTypes.includes(request.entityType as any)) {
+    logger.warn(`[${SERVICE_NAME}] Entity type '${request.entityType}' not allowed. Rejecting request.`);
+    return {
+      success: false,
+      error: {
+        code: 'entity_type_not_allowed',
+        message: `Access to entity type '${request.entityType}' is not allowed.`,
+      },
+      meta,
+    };
+  }
+
+  if (config.logging.enabled) {
+    logger.info(
+      `[${SERVICE_NAME}] Processing request for entity '${request.entityType}', type '${request.type}' from sender '${sender.id || sender.url || 'unknown'}`
+    );
+  }
+
+  switch (request.entityType) {
+    case 'page':
+      return handlePageRequest(request, config);
+    case 'document':
+      return handleDocumentRequest(request, config);
+    case 'model':
+      return handleModelRequest(request, config);
+    case 'knowledge':
+      return handleKnowledgeRequest(request, config);
+    case 'vector':
+      return handleVectorRequest(request, config);
+    case 'message':
+      return handleMessageRequest(request, config);
+    default:
+      logger.warn(`[${SERVICE_NAME}] Unsupported entity type: '${request.entityType}'`);
+      return {
         success: false,
         error: {
-          code: 'entity_type_not_allowed',
-          message: getErrorMessage('entity_type_not_allowed'),
+          code: 'unsupported_entity_type',
+          message: `Entity type '${request.entityType}' is not supported.`,
         },
-        meta: {
-          serverTime: Date.now()
-        }
+        meta,
       };
-      
-      // 记录访问日志
-      await logApiAccess(appId, request, response);
-      
-      return response;
-    }
-    
-    // 根据请求类型处理
-    let response: ApiResponse;
-    
+  }
+}
+
+/**
+ * Handles requests specific to the 'page' entity.
+ * @param request The API request object.
+ * @param config The current data provider configuration.
+ * @returns A promise resolving to an ApiResponse.
+ */
+async function handlePageRequest(
+  request: ApiRequest,
+  config: DataProviderConfig,
+): Promise<ApiResponse> {
+  const db = new SavedPagesDB();
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
+
+  try {
     switch (request.type) {
-      case 'get':
-        response = await handleGetRequest(request);
-        break;
-      case 'list':
-        response = await handleListRequest(request);
-        break;
-      case 'sync':
-        response = await handleSyncRequest(request);
-        break;
-      case 'count':
-        response = await handleCountRequest(request);
-        break;
-      case 'tags':
-        response = await handleTagsRequest(request);
-        break;
-      case 'changes':
-        response = await handleChangesRequest(request);
-        break;
+      case 'get': {
+        if (typeof request.id !== 'string' || !request.id) {
+          return { success: false, error: { code: 'invalid_request', message: "'id' is required and must be a string for 'get' requests." }, meta };
+        }
+        const page = await db.getPageById(request.id);
+        if (!page) {
+          return { success: false, error: { code: 'entity_not_found', message: `Page with id '${request.id}' not found.` }, meta };
+        }
+        return { success: true, data: filterPageContent(page, config), meta };
+      }
+
+      case 'list': {
+        const { filter, page = 1, pageSize = config.sync.batchSize || 10, sort, search, fields } = request.query || {};
+        const numPage = Number(page);
+        const numPageSize = Number(pageSize);
+
+        const allPages = await db.getAllPages({ filter, page: numPage, pageSize: numPageSize, sort, search });
+        const total = await db.getPageCount(filter);
+        const pageCount = Math.ceil(total / numPageSize);
+        
+        const processedPages = allPages.map(p => filterPageContent(p, config, fields));
+
+        return {
+          success: true,
+          data: processedPages,
+          meta: { ...meta, total, page: numPage, pageSize: numPageSize, pageCount },
+        };
+      }
+
+      case 'count': {
+        const { filter } = request.query || {};
+        const count = await db.getPageCount(filter);
+        return { success: true, data: { count }, meta };
+      }
+
+      case 'sync': {
+        const { lastSyncTime, fullSync, maxRecords = config.sync.batchSize } = request.sync || {};
+        const numMaxRecords = Number(maxRecords);
+        const numLastSyncTime = Number(lastSyncTime) || 0;
+
+        if (typeof db.getPagesForSync !== 'function') {
+          logger.error(`[${SERVICE_NAME}] db.getPagesForSync is not implemented!`);
+          return { success: false, error: { code: 'not_implemented', message: 'Sync functionality (getPagesForSync) is not implemented in DB.' }, meta };
+        }
+
+        const pagesToSync = await db.getPagesForSync(
+          fullSync ? 0 : numLastSyncTime,
+          numMaxRecords,
+        );
+
+        const changes: Change[] = pagesToSync.map(page => ({
+          id: page.id!,
+          entityType: 'page',
+          changeType: (page.createdAt && page.updatedAt && page.createdAt === page.updatedAt) ? 'create' : 'update',
+          timestamp: page.updatedAt!,
+          data: filterPageContent(page, config) as EntityData,
+        }));
+
+        return {
+          success: true,
+          data: { changes },
+          meta: { ...meta, syncTime: Date.now(), hasMore: changes.length >= numMaxRecords },
+        };
+      }
+      
+      case 'changes': {
+        const { lastSyncTime, maxRecords = config.sync.batchSize } = request.sync || {};
+        const numMaxRecords = Number(maxRecords);
+        const numLastSyncTime = Number(lastSyncTime) || 0;
+
+        if (typeof db.getPagesForSync !== 'function') {
+          logger.error(`[${SERVICE_NAME}] db.getPagesForSync is not implemented for 'changes' tracking!`);
+          return { success: false, error: { code: 'not_implemented', message: 'Changes tracking (getPagesForSync) is not implemented in DB.' }, meta };
+        }
+
+        const changedPagesMetadata = await db.getPagesForSync(numLastSyncTime, numMaxRecords, true);
+
+        const changes: Change[] = changedPagesMetadata.map(page => ({
+          id: page.id!,
+          entityType: 'page',
+          changeType: (page.createdAt && page.updatedAt && page.createdAt === page.updatedAt) ? 'create' : 'update',
+          timestamp: page.updatedAt!,
+        }));
+
+        return {
+          success: true,
+          data: { changes },
+          meta: { ...meta, syncTime: Date.now(), hasMore: changes.length >= numMaxRecords },
+        };
+      }
+
+      // Note: 'tags' is not a standard request.type in the provided ApiRequest.
+      // If you need to list all unique tags, it might be a custom endpoint or derived.
+      // Example:
+      // case 'list_tags': {
+      //   const tags = await db.getAllUniqueTags(); // This method needs to be implemented in SavedPagesDB
+      //   return { success: true, data: tags, meta };
+      // }
+
       default:
-        response = {
+        logger.warn(`[${SERVICE_NAME}] Unsupported request type '${request.type}' for 'page' entity.`);
+        return {
           success: false,
-          error: {
-            code: 'invalid_request_type',
-            message: getErrorMessage('invalid_request_type'),
-          },
-          meta: {
-            serverTime: Date.now()
-          }
+          error: { code: 'unsupported_request_type', message: `Request type '${request.type}' not supported for 'page' entity.` },
+          meta,
         };
     }
-    
-    // 添加服务器时间到响应元数据
-    if (!response.meta) {
-      response.meta = {};
-    }
-    response.meta.serverTime = Date.now();
-    
-    // 添加客户端标识到响应元数据（如果有）
-    if (request.clientId) {
-      response.meta.clientId = request.clientId;
-    }
-    
-    // 记录访问日志
-    await logApiAccess(appId, request, response);
-    
-    return response;
-  } catch (error) {
-    logger.error('处理API请求失败', error);
-    
-    const response: ApiResponse = {
+  } catch (error: any) {
+    logger.error(`[${SERVICE_NAME}] Error processing 'page' request:`, error);
+    return {
       success: false,
-      error: {
-        code: 'internal_error',
-        message: error.message || getErrorMessage('internal_error'),
-      },
-      meta: {
-        serverTime: Date.now()
+      error: { code: 'internal_db_error', message: error.message || 'Database operation failed.' },
+      meta,
+    };
+  }
+}
+
+/**
+ * Filters page content based on API configuration.
+ * @param page The page object.
+ * @param config The data provider configuration.
+ * @param fields Optional array of fields to include.
+ * @returns The filtered page object.
+ */
+function filterPageContent(page: Page, config: DataProviderConfig, fields?: string[]): Partial<Page> {
+  let filteredPage: Partial<Page> = { ...page };
+
+  if (!config.filters.allowFullContent) {
+    delete filteredPage.content;
+    delete filteredPage.html;
+    delete filteredPage.textContent;
+  }
+
+  if (fields && fields.length > 0) {
+    const selectedPage: Partial<Page> = {};
+    if (page.id && !fields.includes('-id')) {
+        selectedPage.id = page.id;
+    }
+
+    for (const field of fields) {
+      if (field.startsWith('-')) continue;
+
+      if (field in filteredPage) {
+        (selectedPage as any)[field] = (filteredPage as any)[field];
       }
-    };
-    
-    // 记录访问日志
-    await logApiAccess(appId, request, response);
-    
-    return response;
+    }
+    return selectedPage;
   }
+
+  return filteredPage;
 }
 
 /**
- * 处理获取单个实体的请求
+ * 处理文档相关的请求
+ * @param request API请求对象
+ * @param config 当前数据提供者配置
+ * @returns 返回一个Promise解析为ApiResponse
  */
-async function handleGetRequest(request: ApiRequest): Promise<ApiResponse> {
-  // 检查ID是否存在
-  if (!request.id) {
+async function handleDocumentRequest(
+  request: ApiRequest,
+  config: DataProviderConfig,
+): Promise<ApiResponse> {
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
+
+  try {
+    switch (request.type) {
+      case 'get': {
+        if (typeof request.id !== 'string' || !request.id) {
+          return { success: false, error: { code: 'invalid_request', message: "'id' is required and must be a string for 'get' requests." }, meta };
+        }
+        const document = await getDocument(request.id, request.query?.fields);
+        if (!document.data) {
+          return { success: false, error: { code: 'entity_not_found', message: `Document with id '${request.id}' not found.` }, meta };
+        }
+        return { success: true, data: document.data, meta };
+      }
+
+      case 'list': {
+        const { filter, page = 1, pageSize = config.sync.batchSize || 10, sort, search, fields } = request.query || {};
+        const result = await getDocuments({ filter, page, pageSize, sort, search, fields });
+        return {
+          success: true,
+          data: result.data,
+          meta: { ...meta, ...result.meta },
+        };
+      }
+
+      case 'count': {
+        // 文档计数功能尚未实现，返回一个适当的错误
+        return { success: false, error: { code: 'not_implemented', message: 'Document count functionality is not implemented yet.' }, meta };
+      }
+
+      case 'sync':
+      case 'changes': {
+        // 文档同步功能尚未实现，返回一个适当的错误
+        return { success: false, error: { code: 'not_implemented', message: `Document ${request.type} functionality is not implemented yet.` }, meta };
+      }
+
+      default:
+        return {
+          success: false,
+          error: { code: 'unsupported_request_type', message: `Request type '${request.type}' not supported for 'document' entity.` },
+          meta,
+        };
+    }
+  } catch (error: any) {
+    logger.error(`[${SERVICE_NAME}] Error processing 'document' request:`, error);
     return {
       success: false,
-      error: {
-        code: 'missing_id',
-        message: getErrorMessage('missing_id'),
-      },
+      error: { code: 'internal_error', message: error.message || 'An error occurred while processing the document request.' },
+      meta,
     };
   }
-  
-  // 根据实体类型获取数据
-  let result;
-  
-  switch (request.entityType) {
-    case 'page':
-      result = await getPage(request.id, request.query?.fields);
-      break;
-    case 'document':
-      result = await getDocument(request.id, request.query?.fields);
-      break;
-    case 'model':
-      result = await getModel(request.id, request.query?.fields);
-      break;
-    case 'message':
-      result = await getMessage(request.id, request.query?.fields);
-      break;
-    default:
-      return {
-        success: false,
-        error: {
-          code: 'entity_type_not_supported',
-          message: getErrorMessage('entity_type_not_supported'),
-        },
-      };
-  }
-  
-  // 检查是否找到数据
-  if (!result.data) {
+}
+
+/**
+ * 处理模型相关的请求
+ * @param request API请求对象
+ * @param config 当前数据提供者配置
+ * @returns 返回一个Promise解析为ApiResponse
+ */
+async function handleModelRequest(
+  request: ApiRequest,
+  config: DataProviderConfig,
+): Promise<ApiResponse> {
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
+
+  try {
+    switch (request.type) {
+      case 'get': {
+        if (typeof request.id !== 'string' || !request.id) {
+          return { success: false, error: { code: 'invalid_request', message: "'id' is required and must be a string for 'get' requests." }, meta };
+        }
+        const model = await getModel(request.id, request.query?.fields);
+        if (!model.data) {
+          return { success: false, error: { code: 'entity_not_found', message: `Model with id '${request.id}' not found.` }, meta };
+        }
+        return { success: true, data: model.data, meta };
+      }
+
+      case 'list': {
+        const { filter, page = 1, pageSize = config.sync.batchSize || 10, sort, search, fields } = request.query || {};
+        const result = await getModels({ filter, page, pageSize, sort, search, fields });
+        return {
+          success: true,
+          data: result.data,
+          meta: { ...meta, ...result.meta },
+        };
+      }
+
+      case 'count':
+      case 'sync':
+      case 'changes': {
+        // 模型相关其他功能尚未实现，返回一个适当的错误
+        return { success: false, error: { code: 'not_implemented', message: `Model ${request.type} functionality is not implemented yet.` }, meta };
+      }
+
+      default:
+        return {
+          success: false,
+          error: { code: 'unsupported_request_type', message: `Request type '${request.type}' not supported for 'model' entity.` },
+          meta,
+        };
+    }
+  } catch (error: any) {
+    logger.error(`[${SERVICE_NAME}] Error processing 'model' request:`, error);
     return {
       success: false,
-      error: {
-        code: 'not_found',
-        message: getErrorMessage('not_found'),
-      },
+      error: { code: 'internal_error', message: error.message || 'An error occurred while processing the model request.' },
+      meta,
     };
   }
-  
-  return {
-    success: true,
-    data: result.data,
-    meta: result.meta,
-  };
 }
 
 /**
- * 处理获取实体列表的请求
+ * 处理知识库相关的请求
+ * @param request API请求对象
+ * @param config 当前数据提供者配置
+ * @returns 返回一个Promise解析为ApiResponse
  */
-async function handleListRequest(request: ApiRequest): Promise<ApiResponse> {
-  // 根据实体类型获取数据
-  let result;
-  
-  switch (request.entityType) {
-    case 'page':
-      result = await getPages(request.query);
-      break;
-    case 'document':
-      result = await getDocuments(request.query);
-      break;
-    case 'model':
-      result = await getModels(request.query);
-      break;
-    case 'message':
-      result = await getMessages(request.query);
-      break;
-    default:
-      return {
-        success: false,
-        error: {
-          code: 'entity_type_not_supported',
-          message: getErrorMessage('entity_type_not_supported'),
-        },
-      };
-  }
-  
-  return {
-    success: true,
-    data: result.data,
-    meta: result.meta,
-  };
-}
+async function handleKnowledgeRequest(
+  request: ApiRequest,
+  config: DataProviderConfig,
+): Promise<ApiResponse> {
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
 
-/**
- * 处理同步请求
- */
-async function handleSyncRequest(request: ApiRequest): Promise<ApiResponse> {
-  // 检查同步参数
-  if (!request.sync) {
+  try {
+    // 知识库功能尚未完全实现，这里提供一个通用的响应
+    return { 
+      success: false, 
+      error: { code: 'not_implemented', message: `Knowledge base ${request.type} functionality is not implemented yet.` }, 
+      meta 
+    };
+  } catch (error: any) {
+    logger.error(`[${SERVICE_NAME}] Error processing 'knowledge' request:`, error);
     return {
       success: false,
-      error: {
-        code: 'missing_sync_params',
-        message: getErrorMessage('missing_sync_params'),
-      },
+      error: { code: 'internal_error', message: error.message || 'An error occurred while processing the knowledge request.' },
+      meta,
     };
   }
-  
-  // 获取上次同步时间
-  const lastSyncTime = request.sync.lastSyncTime || 0;
-  
-  // 获取变更记录
-  const changes = await getChangesSince(
-    lastSyncTime,
-    request.sync.fullSync ? undefined : request.entityType
-  );
-  
-  // 获取当前时间作为同步时间
-  const syncTime = Date.now();
-  
-  return {
-    success: true,
-    data: {
-      changes,
-    },
-    meta: {
-      syncTime,
-      hasMore: false, // 目前不支持分页同步
-    },
-  };
 }
 
 /**
- * 处理计数请求
+ * 处理向量相关的请求
+ * @param request API请求对象
+ * @param config 当前数据提供者配置
+ * @returns 返回一个Promise解析为ApiResponse
  */
-async function handleCountRequest(request: ApiRequest): Promise<ApiResponse> {
-  // 根据实体类型获取计数
-  let result;
-  
-  switch (request.entityType) {
-    case 'page':
-      result = await getPageCount(request.query?.filter);
-      break;
-    default:
-      return {
-        success: false,
-        error: {
-          code: 'entity_type_not_supported',
-          message: getErrorMessage('entity_type_not_supported'),
-        },
-      };
-  }
-  
-  return {
-    success: true,
-    data: result.data,
-  };
-}
+async function handleVectorRequest(
+  request: ApiRequest,
+  config: DataProviderConfig,
+): Promise<ApiResponse> {
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
 
-/**
- * 处理获取标签的请求
- */
-async function handleTagsRequest(request: ApiRequest): Promise<ApiResponse> {
-  // 目前只支持页面标签
-  if (request.entityType !== 'page') {
+  try {
+    // 向量功能尚未完全实现，这里提供一个通用的响应
+    return { 
+      success: false, 
+      error: { code: 'not_implemented', message: `Vector ${request.type} functionality is not implemented yet.` }, 
+      meta 
+    };
+  } catch (error: any) {
+    logger.error(`[${SERVICE_NAME}] Error processing 'vector' request:`, error);
     return {
       success: false,
-      error: {
-        code: 'entity_type_not_supported',
-        message: getErrorMessage('entity_type_not_supported'),
-      },
+      error: { code: 'internal_error', message: error.message || 'An error occurred while processing the vector request.' },
+      meta,
     };
   }
-  
-  // 获取所有标签
-  const result = await getAllTags();
-  
-  return {
-    success: true,
-    data: result.data,
-  };
 }
 
 /**
- * 处理获取变更记录的请求
+ * 处理消息相关的请求
+ * @param request API请求对象
+ * @param config 当前数据提供者配置
+ * @returns 返回一个Promise解析为ApiResponse
  */
-async function handleChangesRequest(request: ApiRequest): Promise<ApiResponse> {
-  // 检查同步参数
-  if (!request.sync) {
+async function handleMessageRequest(
+  request: ApiRequest,
+  config: DataProviderConfig,
+): Promise<ApiResponse> {
+  const meta = { serverTime: Date.now(), clientId: request.clientId };
+
+  try {
+    switch (request.type) {
+      case 'get': {
+        if (typeof request.id !== 'string' || !request.id) {
+          return { success: false, error: { code: 'invalid_request', message: "'id' is required and must be a string for 'get' requests." }, meta };
+        }
+        const message = await getMessage(request.id, request.query?.fields);
+        if (!message.data) {
+          return { success: false, error: { code: 'entity_not_found', message: `Message with id '${request.id}' not found.` }, meta };
+        }
+        return { success: true, data: message.data, meta };
+      }
+
+      case 'list': {
+        const { filter, page = 1, pageSize = config.sync.batchSize || 10, sort, search, fields } = request.query || {};
+        const result = await getMessages({ filter, page, pageSize, sort, search, fields });
+        return {
+          success: true,
+          data: result.data,
+          meta: { ...meta, ...result.meta },
+        };
+      }
+
+      case 'count':
+      case 'sync':
+      case 'changes': {
+        // 消息相关其他功能尚未实现，返回一个适当的错误
+        return { success: false, error: { code: 'not_implemented', message: `Message ${request.type} functionality is not implemented yet.` }, meta };
+      }
+
+      default:
+        return {
+          success: false,
+          error: { code: 'unsupported_request_type', message: `Request type '${request.type}' not supported for 'message' entity.` },
+          meta,
+        };
+    }
+  } catch (error: any) {
+    logger.error(`[${SERVICE_NAME}] Error processing 'message' request:`, error);
     return {
       success: false,
-      error: {
-        code: 'missing_changes_params',
-        message: getErrorMessage('missing_changes_params'),
-      },
+      error: { code: 'internal_error', message: error.message || 'An error occurred while processing the message request.' },
+      meta,
     };
   }
-  
-  // 获取上次同步时间
-  const lastSyncTime = request.sync.lastSyncTime || 0;
-  
-  // 获取最大返回记录数
-  const maxRecords = request.sync.maxRecords || 50;
-  
-  // 获取变更记录
-  const changes = await getChangesSince(
-    lastSyncTime,
-    request.entityType,
-    maxRecords
-  );
-  
-  // 获取当前时间作为同步时间
-  const syncTime = Date.now();
-  
-  // 检查是否还有更多变更
-  const hasMore = changes.length >= maxRecords;
-  
-  return {
-    success: true,
-    data: {
-      changes: changes.map(change => ({
-        entityType: change.entityType,
-        entityId: change.entityId,
-        changeType: change.changeType,
-        timestamp: change.timestamp,
-        sequenceNumber: change.sequenceNumber || 0
-      }))
-    },
-    meta: {
-      syncTime,
-      hasMore,
-    },
-  };
 }
 
-/**
- * 获取错误消息
- */
-function getErrorMessage(code: string): string {
-  const errorMessages: Record<string, string> = {
-    'unauthorized': '未授权的访问',
-    'invalid_token': '无效的访问令牌',
-    'unauthorized_app': '未授权的应用',
-    'api_disabled': 'API已禁用',
-    'rate_limit_exceeded': '超过速率限制',
-    'missing_id': '缺少ID参数',
-    'not_found': '未找到请求的资源',
-    'entity_type_not_supported': '不支持的实体类型',
-    'entity_type_not_allowed': '不允许访问该实体类型',
-    'invalid_request_type': '无效的请求类型',
-    'missing_sync_params': '缺少同步参数',
-    'missing_changes_params': '缺少变更记录参数',
-    'internal_error': '内部错误',
-  };
-  
-  return errorMessages[code] || '未知错误';
-}
+// 所有实体类型的处理函数已实现，未来可以根据需要完善更多具体功能
+
+logger.info(`[${SERVICE_NAME}] Service module loaded.`);
