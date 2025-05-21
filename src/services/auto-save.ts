@@ -12,6 +12,7 @@ import { WebsiteRule } from "@/components/Option/SavedPages/AutoSaveSettings";
 
 // 存储键名
 const STORAGE_KEY = 'auto_save_settings';
+const TASKS_STORAGE_KEY = 'auto_save_tasks';
 
 // 自动保存设置的类型定义
 export interface AutoSaveSettings {
@@ -40,6 +41,28 @@ export interface SaveTask {
   scheduledAt: number;    // 计划保存时间
   status: SaveTaskStatus; // 任务状态
   error?: string;         // 错误信息（如果有）
+  matchedRule?: string;   // 匹配的规则
+}
+
+// 持久化的任务状态
+export interface PersistentSaveTask {
+  tabId: number;
+  url: string;
+  title?: string;
+  createdAt: number;      // 创建时间
+  scheduledAt: number;    // 计划保存时间
+  status: SaveTaskStatus; // 任务状态
+  error?: string;         // 错误信息（如果有）
+  matchedRule?: string;   // 匹配的规则
+  filtered: boolean;      // 是否被过滤
+  filterReason?: string;  // 过滤原因
+}
+
+// 持久化的任务列表
+export interface PersistentSaveTasks {
+  tasks: PersistentSaveTask[];
+  lastUpdated: number;    // 最后更新时间
+  version: string;        // 数据版本，用于未来兼容性
 }
 
 // 当前保存任务列表
@@ -47,6 +70,11 @@ const saveTasks: Map<number, SaveTask> = new Map();
 
 // 存储实例
 const storage = new Storage({ area: 'local' });
+
+// 心跳检查
+const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5分钟
+let lastHeartbeat = Date.now();
+let heartbeatIntervalId: number;
 
 /**
  * 检查URL是否匹配规则
@@ -141,14 +169,18 @@ export const isUrlMatchPattern = (url: string, pattern: string): boolean => {
 };
 
 /**
- * 检查URL是否应该自动保存
+ * 检查URL是否应该自动保存，并返回匹配的规则
  * @param url 要检查的URL
  * @param settings 自动保存设置
+ * @returns 包含是否应该保存和匹配规则的对象
  */
-export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings): Promise<boolean> => {
+export const shouldAutoSaveUrlWithRule = async (url: string, settings?: AutoSaveSettings): Promise<{
+  shouldSave: boolean;
+  matchedRule: string;
+}> => {
   if (!url) {
     logger.debug('URL为空，不会自动保存');
-    return false;
+    return { shouldSave: false, matchedRule: '' };
   }
 
   try {
@@ -172,12 +204,12 @@ export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings
     // 如果自动保存功能未启用或已暂停，返回false
     if (!settings || !settings.enabled) {
       logger.debug('自动保存功能未启用，不会自动保存', { url: normalizedUrl });
-      return false;
+      return { shouldSave: false, matchedRule: '' };
     }
 
     if (settings.paused) {
       logger.debug('自动保存功能已暂停，不会自动保存', { url: normalizedUrl });
-      return false;
+      return { shouldSave: false, matchedRule: '' };
     }
 
     // 获取所有启用的规则
@@ -191,7 +223,7 @@ export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings
     // 如果没有启用的规则，返回false
     if (enabledRules.length === 0) {
       logger.debug('没有启用的规则，不会自动保存', { url: normalizedUrl });
-      return false;
+      return { shouldSave: false, matchedRule: '' };
     }
 
     // 规则优先级处理：
@@ -210,7 +242,7 @@ export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings
 
       if (isUrlMatchPattern(normalizedUrl, patternWithoutPrefix)) {
         logger.info(`URL ${normalizedUrl} 匹配排除规则 ${rule.pattern}，不会自动保存`);
-        return false;
+        return { shouldSave: false, matchedRule: rule.pattern };
       }
     }
 
@@ -226,7 +258,7 @@ export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings
       // 使用改进后的isUrlMatchPattern函数进行匹配
       if (isUrlMatchPattern(normalizedUrl, rule.pattern)) {
         logger.info(`URL ${normalizedUrl} 匹配精确规则 ${rule.pattern}，将自动保存`);
-        return true;
+        return { shouldSave: true, matchedRule: rule.pattern };
       }
     }
 
@@ -241,17 +273,27 @@ export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings
 
       if (isUrlMatchPattern(normalizedUrl, rule.pattern)) {
         logger.info(`URL ${normalizedUrl} 匹配通配符规则 ${rule.pattern}，将自动保存`);
-        return true;
+        return { shouldSave: true, matchedRule: rule.pattern };
       }
     }
 
     // 如果没有匹配任何规则，返回false
     logger.debug(`URL ${normalizedUrl} 不匹配任何规则，不会自动保存`);
-    return false;
+    return { shouldSave: false, matchedRule: '' };
   } catch (error) {
     logger.error('检查URL是否应该自动保存时出错:', error);
-    return false;
+    return { shouldSave: false, matchedRule: '' };
   }
+};
+
+/**
+ * 检查URL是否应该自动保存
+ * @param url 要检查的URL
+ * @param settings 自动保存设置
+ */
+export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings): Promise<boolean> => {
+  const result = await shouldAutoSaveUrlWithRule(url, settings);
+  return result.shouldSave;
 };
 
 /**
@@ -371,8 +413,9 @@ export const autoSavePage = async (tabId: number): Promise<void> => {
 /**
  * 为标签页设置自动保存任务
  * @param tabId 标签页ID
+ * @param existingTask 可选的现有任务，用于从持久化存储恢复任务
  */
-export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
+export const setupAutoSaveTask = async (tabId: number, existingTask?: PersistentSaveTask): Promise<void> => {
   try {
     // 获取标签页信息
     const tab = await browser.tabs.get(tabId);
@@ -391,6 +434,11 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
       logger.debug(`标签页 ${tabId} 不设置自动保存任务: 功能未启用`, {
         enabled: settings?.enabled
       });
+
+      // 记录被过滤的URL（功能未启用）
+      if (!existingTask) {
+        await recordFilteredUrl(tabId, url, title, '自动保存功能未启用');
+      }
       return;
     }
 
@@ -401,13 +449,36 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
       });
       // 清除之前的任务（如果存在）
       clearAutoSaveTask(tabId);
+
+      // 记录被过滤的URL（功能已暂停）
+      if (!existingTask) {
+        await recordFilteredUrl(tabId, url, title, '自动保存功能已暂停');
+      }
       return;
     }
 
-    // 检查URL是否应该自动保存
-    const shouldSave = await shouldAutoSaveUrl(url, settings);
+    // 如果是恢复任务，直接使用现有的匹配规则
+    let shouldSave = false;
+    let matchedRule = '';
+
+    if (existingTask) {
+      shouldSave = true;
+      matchedRule = existingTask.matchedRule || '';
+      logger.debug(`从持久化存储恢复标签页 ${tabId} 的自动保存任务`, { url, matchedRule });
+    } else {
+      // 检查URL是否应该自动保存
+      const matchResult = await shouldAutoSaveUrlWithRule(url, settings);
+      shouldSave = matchResult.shouldSave;
+      matchedRule = matchResult.matchedRule;
+    }
+
     if (!shouldSave) {
       logger.debug(`标签页 ${tabId} 不设置自动保存任务: URL不符合规则`, { url });
+
+      // 记录被过滤的URL（不符合规则）
+      if (!existingTask) {
+        await recordFilteredUrl(tabId, url, title, '不符合自动保存规则');
+      }
       return;
     }
 
@@ -416,8 +487,10 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
 
     // 设置新的自动保存任务
     const now = Date.now();
-    const delayMs = settings.saveDelay * 60 * 1000; // 转换为毫秒
-    const scheduledAt = now + delayMs;
+
+    // 如果是恢复任务，使用现有的计划时间
+    const scheduledAt = existingTask ? existingTask.scheduledAt : now + (settings.saveDelay * 60 * 1000);
+    const delayMs = Math.max(0, scheduledAt - now); // 确保延迟不为负数
 
     const timeoutId = setTimeout(() => {
       // 再次检查设置，确保在延迟期间没有被禁用或暂停
@@ -433,6 +506,9 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
         if (task) {
           task.status = SaveTaskStatus.SAVING;
           saveTasks.set(tabId, task);
+
+          // 保存状态到持久化存储
+          persistTasks();
         }
 
         // 执行保存
@@ -443,9 +519,13 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
             task.status = SaveTaskStatus.COMPLETED;
             saveTasks.set(tabId, task);
 
+            // 保存状态到持久化存储
+            persistTasks();
+
             // 5秒后删除已完成的任务
             setTimeout(() => {
               saveTasks.delete(tabId);
+              persistTasks();
             }, 5000);
           }
         }).catch(error => {
@@ -455,6 +535,9 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
             task.status = SaveTaskStatus.FAILED;
             task.error = error instanceof Error ? error.message : String(error);
             saveTasks.set(tabId, task);
+
+            // 保存状态到持久化存储
+            persistTasks();
           }
         });
       });
@@ -466,16 +549,21 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
       url,
       title,
       timeoutId,
-      createdAt: now,
+      createdAt: existingTask ? existingTask.createdAt : now,
       scheduledAt,
-      status: SaveTaskStatus.WAITING
+      status: SaveTaskStatus.WAITING,
+      matchedRule
     });
+
+    // 保存状态到持久化存储
+    await persistTasks();
 
     logger.debug(`已为标签页 ${tabId} 设置自动保存任务`, {
       url,
       title,
-      delay: settings.saveDelay,
-      scheduledAt: new Date(scheduledAt).toLocaleString()
+      delay: delayMs / 1000,
+      scheduledAt: new Date(scheduledAt).toLocaleString(),
+      matchedRule
     });
   } catch (error) {
     logger.error('设置自动保存任务失败:', error);
@@ -483,15 +571,169 @@ export const setupAutoSaveTask = async (tabId: number): Promise<void> => {
 };
 
 /**
+ * 记录被过滤的URL
+ * @param tabId 标签页ID
+ * @param url URL
+ * @param title 标题
+ * @param reason 过滤原因
+ */
+const recordFilteredUrl = async (tabId: number, url: string, title: string, reason: string): Promise<void> => {
+  try {
+    // 创建过滤任务
+    const filteredTask: PersistentSaveTask = {
+      tabId,
+      url,
+      title,
+      createdAt: Date.now(),
+      scheduledAt: 0,
+      status: SaveTaskStatus.WAITING,
+      filtered: true,
+      filterReason: reason
+    };
+
+    // 获取现有的持久化数据
+    const persistentData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY) || {
+      tasks: [],
+      lastUpdated: Date.now(),
+      version: '1.0'
+    };
+
+    // 移除相同tabId的任务
+    persistentData.tasks = persistentData.tasks.filter(task => task.tabId !== tabId);
+
+    // 添加新的过滤任务
+    persistentData.tasks.push(filteredTask);
+    persistentData.lastUpdated = Date.now();
+
+    // 保存到存储
+    await storage.set(TASKS_STORAGE_KEY, persistentData);
+
+    logger.debug(`已记录被过滤的URL: ${url}`, { reason });
+  } catch (error) {
+    logger.error('记录被过滤的URL失败:', error);
+  }
+};
+
+/**
  * 清除标签页的自动保存任务
  * @param tabId 标签页ID
  */
-export const clearAutoSaveTask = (tabId: number): void => {
+export const clearAutoSaveTask = async (tabId: number): Promise<void> => {
   const task = saveTasks.get(tabId);
   if (task) {
     clearTimeout(task.timeoutId);
     saveTasks.delete(tabId);
     logger.debug(`已清除标签页 ${tabId} 的自动保存任务`);
+
+    // 从持久化存储中删除任务
+    try {
+      const persistentData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY);
+      if (persistentData && persistentData.tasks) {
+        // 保留被过滤的任务和其他标签页的任务
+        persistentData.tasks = persistentData.tasks.filter(t => t.tabId !== tabId || t.filtered);
+        persistentData.lastUpdated = Date.now();
+        await storage.set(TASKS_STORAGE_KEY, persistentData);
+        logger.debug(`已从持久化存储中删除标签页 ${tabId} 的自动保存任务`);
+      }
+    } catch (error) {
+      logger.error(`从持久化存储中删除标签页 ${tabId} 的自动保存任务失败:`, error);
+    }
+  }
+};
+
+/**
+ * 保存任务状态到存储
+ */
+const persistTasks = async (): Promise<void> => {
+  try {
+    const tasks = Array.from(saveTasks.values()).map(task => ({
+      tabId: task.tabId,
+      url: task.url,
+      title: task.title,
+      createdAt: task.createdAt,
+      scheduledAt: task.scheduledAt,
+      status: task.status,
+      error: task.error,
+      matchedRule: task.matchedRule,
+      filtered: false, // 内存中的任务不是被过滤的
+      filterReason: undefined
+    }));
+
+    // 获取现有的持久化数据
+    const existingData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY);
+
+    // 合并现有的过滤任务（如果有）
+    let allTasks = [...tasks];
+    if (existingData && existingData.tasks) {
+      // 保留被过滤的任务
+      const filteredTasks = existingData.tasks.filter(task => task.filtered);
+
+      // 移除已经在内存中的任务（通过tabId匹配）
+      const memoryTabIds = new Set(tasks.map(t => t.tabId));
+      const remainingFilteredTasks = filteredTasks.filter(task => !memoryTabIds.has(task.tabId));
+
+      // 合并任务列表
+      allTasks = [...tasks, ...remainingFilteredTasks];
+    }
+
+    const persistentData: PersistentSaveTasks = {
+      tasks: allTasks,
+      lastUpdated: Date.now(),
+      version: '1.0'
+    };
+
+    await storage.set(TASKS_STORAGE_KEY, persistentData);
+    logger.debug('已保存自动保存任务状态到存储', { taskCount: allTasks.length });
+  } catch (error) {
+    logger.error('保存任务状态到存储失败:', error);
+  }
+};
+
+/**
+ * 从存储加载任务状态
+ */
+const loadTasks = async (): Promise<void> => {
+  try {
+    const persistentData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY);
+
+    if (!persistentData || !persistentData.tasks) {
+      logger.debug('存储中没有保存的任务状态');
+      return;
+    }
+
+    // 获取非过滤的任务
+    const nonFilteredTasks = persistentData.tasks.filter(task => !task.filtered);
+
+    logger.info(`从存储加载了 ${nonFilteredTasks.length} 个自动保存任务`);
+
+    // 清除当前内存中的任务
+    saveTasks.forEach((_, tabId) => {
+      clearTimeout(saveTasks.get(tabId)?.timeoutId);
+    });
+    saveTasks.clear();
+
+    // 恢复任务状态
+    for (const task of nonFilteredTasks) {
+      // 检查标签页是否仍然存在
+      try {
+        const tab = await browser.tabs.get(task.tabId);
+        if (!tab || !tab.url) continue;
+
+        // 如果任务状态是等待中，且计划时间尚未到达，重新设置定时器
+        if (task.status === SaveTaskStatus.WAITING && task.scheduledAt > Date.now()) {
+          setupAutoSaveTask(task.tabId, task);
+        }
+        // 如果任务已过期但未执行，立即执行
+        else if (task.status === SaveTaskStatus.WAITING && task.scheduledAt <= Date.now()) {
+          autoSavePage(task.tabId);
+        }
+      } catch (error) {
+        // 标签页不存在，忽略此任务
+        logger.debug(`标签页 ${task.tabId} 不存在，忽略恢复任务`, { url: task.url });
+      }
+    }
+  } catch (error) {
+    logger.error('从存储加载任务状态失败:', error);
   }
 };
 
@@ -499,8 +741,32 @@ export const clearAutoSaveTask = (tabId: number): void => {
  * 获取当前所有保存任务
  * @returns 当前所有保存任务的数组
  */
-export const getAllSaveTasks = (): SaveTask[] => {
-  return Array.from(saveTasks.values());
+export const getAllSaveTasks = async (): Promise<SaveTask[]> => {
+  // 返回内存中的任务
+  const memoryTasks = Array.from(saveTasks.values());
+
+  try {
+    // 获取持久化的任务
+    const persistentData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY);
+    if (!persistentData || !persistentData.tasks) {
+      return memoryTasks;
+    }
+
+    // 获取被过滤的任务
+    const filteredTasks = persistentData.tasks.filter(task => task.filtered);
+
+    // 将被过滤的任务转换为SaveTask格式（添加一个虚拟的timeoutId）
+    const filteredSaveTasks: SaveTask[] = filteredTasks.map(task => ({
+      ...task,
+      timeoutId: -1, // 虚拟的timeoutId
+    }));
+
+    // 合并内存中的任务和被过滤的任务
+    return [...memoryTasks, ...filteredSaveTasks];
+  } catch (error) {
+    logger.error('获取所有保存任务失败:', error);
+    return memoryTasks;
+  }
 };
 
 /**
@@ -604,20 +870,162 @@ export const saveAllOpenTabs = async (): Promise<{
 };
 
 /**
+ * 检查所有打开的标签页
+ */
+export const checkAllTabs = async (): Promise<void> => {
+  try {
+    const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+
+    // 如果自动保存功能已启用且未暂停，为所有打开的标签页设置自动保存任务
+    if (settings?.enabled && !settings.paused) {
+      const tabs = await browser.tabs.query({});
+      logger.info(`检查所有标签页，共 ${tabs.length} 个标签页`);
+
+      for (const tab of tabs) {
+        if (tab.id) await setupAutoSaveTask(tab.id);
+      }
+    }
+  } catch (error) {
+    logger.error('检查所有标签页时出错:', error);
+  }
+};
+
+/**
+ * 手动检查所有标签页并返回统计信息
+ */
+export const manualCheckAllTabs = async (): Promise<{
+  checked: number;
+  setup: number;
+  filtered: number;
+}> => {
+  try {
+    const tabs = await browser.tabs.query({});
+    let checkedCount = 0;
+    let setupCount = 0;
+    let filteredCount = 0;
+
+    const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+    if (!settings || !settings.enabled || settings.paused) {
+      return { checked: 0, setup: 0, filtered: 0 };
+    }
+
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue;
+
+      checkedCount++;
+
+      // 检查URL是否应该自动保存
+      const matchResult = await shouldAutoSaveUrlWithRule(tab.url, settings);
+      if (matchResult.shouldSave) {
+        await setupAutoSaveTask(tab.id);
+        setupCount++;
+      } else {
+        // 记录被过滤的URL
+        await recordFilteredUrl(tab.id, tab.url, tab.title || '', '手动检查：不匹配任何规则');
+        filteredCount++;
+      }
+    }
+
+    return { checked: checkedCount, setup: setupCount, filtered: filteredCount };
+  } catch (error) {
+    logger.error('手动检查所有标签页时出错:', error);
+    return { checked: 0, setup: 0, filtered: 0 };
+  }
+};
+
+/**
+ * 启动心跳检查
+ */
+const startHeartbeat = (): void => {
+  // 清除可能存在的旧定时器
+  if (heartbeatIntervalId) {
+    clearInterval(heartbeatIntervalId);
+  }
+
+  // 设置新的心跳检查
+  heartbeatIntervalId = setInterval(() => {
+    const now = Date.now();
+    const timeSinceLastHeartbeat = now - lastHeartbeat;
+
+    // 如果上次心跳时间距离现在超过了两倍的心跳间隔，说明可能发生了休眠
+    if (timeSinceLastHeartbeat > HEARTBEAT_INTERVAL * 2) {
+      logger.info('检测到可能的系统休眠，重新初始化自动保存功能', {
+        timeSinceLastHeartbeat: Math.floor(timeSinceLastHeartbeat / 1000) + '秒'
+      });
+
+      // 重新加载任务状态并检查所有标签页
+      loadTasks().then(() => {
+        checkAllTabs();
+      });
+    }
+
+    lastHeartbeat = now;
+  }, HEARTBEAT_INTERVAL);
+
+  logger.debug('已启动自动保存心跳检查机制');
+};
+
+/**
+ * 更新自动保存状态指示器
+ */
+export const updateAutoSaveStatus = async (status?: string): Promise<void> => {
+  try {
+    const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+
+    if (!settings || !settings.enabled) {
+      browser.action.setBadgeText({ text: 'OFF' });
+      browser.action.setBadgeBackgroundColor({ color: '#F44336' }); // 红色
+      browser.action.setTitle({ title: '自动保存功能已禁用' });
+    } else if (settings.paused) {
+      browser.action.setBadgeText({ text: 'PAUSE' });
+      browser.action.setBadgeBackgroundColor({ color: '#FFC107' }); // 黄色
+      browser.action.setTitle({ title: '自动保存功能已暂停' });
+    } else {
+      browser.action.setBadgeText({ text: 'ON' });
+      browser.action.setBadgeBackgroundColor({ color: '#4CAF50' }); // 绿色
+      browser.action.setTitle({ title: '自动保存功能已启用' });
+    }
+
+    if (status) {
+      browser.action.setBadgeText({ text: status });
+    }
+  } catch (error) {
+    logger.error('更新自动保存状态指示器失败:', error);
+  }
+};
+
+/**
  * 初始化自动保存功能
  */
 export const initAutoSave = (): void => {
+  // 从存储加载任务状态
+  loadTasks().then(() => {
+    logger.info('已从存储加载自动保存任务状态');
+  });
+
+  // 启动心跳检查
+  startHeartbeat();
+
+  // 更新状态指示器
+  updateAutoSaveStatus();
+
   // 监听标签页更新事件
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // 当页面加载完成时设置自动保存任务
     if (changeInfo.status === 'complete' && tab.url) {
       setupAutoSaveTask(tabId);
+
+      // 更新心跳时间
+      lastHeartbeat = Date.now();
     }
   });
 
   // 监听标签页关闭事件
   browser.tabs.onRemoved.addListener((tabId) => {
     clearAutoSaveTask(tabId);
+
+    // 更新心跳时间
+    lastHeartbeat = Date.now();
   });
 
   // 监听设置变更
@@ -633,15 +1041,18 @@ export const initAutoSave = (): void => {
         newPaused: newSettings?.paused
       });
 
+      // 更新状态指示器
+      updateAutoSaveStatus();
+
       // 如果设置从禁用变为启用，且未暂停，为所有打开的标签页设置自动保存任务
       if (newSettings?.enabled && !newSettings.paused &&
           (!oldSettings || !oldSettings.enabled || oldSettings.paused)) {
         const tabs = await browser.tabs.query({});
         logger.info(`自动保存功能已启用或恢复，为 ${tabs.length} 个标签页设置自动保存任务`);
 
-        tabs.forEach(tab => {
-          if (tab.id) setupAutoSaveTask(tab.id);
-        });
+        for (const tab of tabs) {
+          if (tab.id) await setupAutoSaveTask(tab.id);
+        }
       }
 
       // 如果设置从启用变为禁用，或从未暂停变为暂停，清除所有自动保存任务
@@ -651,9 +1062,9 @@ export const initAutoSave = (): void => {
         const taskCount = saveTasks.size;
         logger.info(`清除所有自动保存任务，共 ${taskCount} 个任务`);
 
-        saveTasks.forEach((task) => {
-          clearAutoSaveTask(task.tabId);
-        });
+        for (const task of Array.from(saveTasks.values())) {
+          await clearAutoSaveTask(task.tabId);
+        }
 
         if (newSettings?.paused) {
           logger.info('自动保存功能已暂停，所有保存任务已清除');
@@ -662,6 +1073,22 @@ export const initAutoSave = (): void => {
         }
       }
     }
+  });
+
+  // 监听浏览器启动事件
+  browser.runtime.onStartup.addListener(() => {
+    logger.info('浏览器启动，初始化自动保存功能');
+    loadTasks().then(() => {
+      checkAllTabs();
+    });
+  });
+
+  // 监听扩展安装/更新事件
+  browser.runtime.onInstalled.addListener(() => {
+    logger.info('扩展安装或更新，初始化自动保存功能');
+    loadTasks().then(() => {
+      checkAllTabs();
+    });
   });
 
   // 初始化时检查是否有需要设置自动保存任务的标签页
@@ -674,9 +1101,9 @@ export const initAutoSave = (): void => {
         const tabs = await browser.tabs.query({});
         logger.info(`初始化自动保存功能，为 ${tabs.length} 个标签页检查自动保存规则`);
 
-        tabs.forEach(tab => {
-          if (tab.id) setupAutoSaveTask(tab.id);
-        });
+        for (const tab of tabs) {
+          if (tab.id) await setupAutoSaveTask(tab.id);
+        }
       }
     } catch (error) {
       logger.error('初始化自动保存任务时出错:', error);
