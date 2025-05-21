@@ -11,6 +11,7 @@ import storageViewer from "@/utils/storage-viewer"
 import { initAutoSave, updateAutoSaveStatus, manualCheckAllTabs } from "@/services/auto-save"
 import { screenshotThrottler } from "@/services/screenshot-throttler"
 import logger from '@/utils/logger'
+import { initDataProviderAPI } from '@/services/data-provider/api-service'
 
 export default defineBackground({
   main() {
@@ -187,6 +188,15 @@ export default defineBackground({
         } catch (syncError) {
           // 确保同步服务初始化失败不会影响扩展的其他功能
           console.error("初始化数据同步服务失败:", syncError);
+        }
+
+        // 初始化数据提供者API
+        try {
+          console.log("正在初始化数据提供者API服务...");
+          initDataProviderAPI();
+          console.log("数据提供者API服务初始化完成");
+        } catch (apiError) {
+          console.error("初始化数据提供者API服务失败:", apiError);
         }
 
       } catch (error) {

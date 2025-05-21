@@ -2,7 +2,7 @@
  * 数据提供者API数据访问层
  */
 import logger from '@/utils/logger';
-import { SavedPagesDB, SavedPage, QueryParams as PageQueryParams } from '@/db/saved-pages';
+import { SavedPagesDB, SavedPage, QueryParams as PageQueryParams } from '@/db/savedPages';
 import { PageAssitDatabase } from '@/db/index';
 import { getDataProviderConfig } from '@/config/data-provider-config';
 

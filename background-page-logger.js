@@ -76,13 +76,97 @@ function analyzeExistingListeners() {
 // 初始检查处理API请求的函数是否存在 (用于诊断)
 const REAL_API_HANDLER_NAME = 'handleDataProviderRequest'; // 与 api-service.ts 中的导出函数名一致
 
+// 尝试找到实际的API处理函数并将其导出到全局作用域
+function exposeApiHandlerToGlobalScope() {
+    console.log('🔍 尝试在模块系统中查找API处理函数...');
+    
+    // 首先检查是否已经存在
+    if (typeof globalScope[REAL_API_HANDLER_NAME] === 'function') {
+        console.log(`✅ ${REAL_API_HANDLER_NAME} 已在全局作用域中`);
+        return true;
+    }
+    
+    // 尝试从各种可能的位置查找处理函数
+    try {
+        // 尝试方法1: 从已加载的模块中直接寻找
+        if (typeof globalScope.DataProviderAPI !== 'undefined' && typeof globalScope.DataProviderAPI.handleDataProviderRequest === 'function') {
+            globalScope.handleDataProviderRequest = globalScope.DataProviderAPI.handleDataProviderRequest;
+            console.log('✅ 从DataProviderAPI模块导出处理函数到全局作用域');
+            return true;
+        }
+        
+        // 尝试方法2: 从chrome.extension API中寻找
+        if (typeof chrome.extension !== 'undefined' && typeof chrome.extension.getBackgroundPage === 'function') {
+            try {
+                const bgPage = chrome.extension.getBackgroundPage();
+                if (bgPage && typeof bgPage.handleDataProviderRequest === 'function') {
+                    globalScope.handleDataProviderRequest = bgPage.handleDataProviderRequest;
+                    console.log('✅ 从background page导出处理函数到全局作用域');
+                    return true;
+                }
+            } catch (e) {
+                console.warn('获取background page时出错:', e);
+            }
+        }
+        
+        // 尝试方法3: 查找所有导出的模块
+        for (const key in globalScope) {
+            if (key === 'window' || key === 'self' || key === 'globalThis') continue;
+            
+            try {
+                const module = globalScope[key];
+                // 检查对象及其原型链
+                if (typeof module === 'object' && module !== null) {
+                    // 直接检查对象
+                    if (typeof module.handleDataProviderRequest === 'function') {
+                        globalScope.handleDataProviderRequest = module.handleDataProviderRequest;
+                        console.log(`✅ 从全局模块 '${key}' 导出处理函数到全局作用域`);
+                        return true;
+                    }
+                    
+                    // 检查对象内部导出
+                    for (const subKey in module) {
+                        try {
+                            const subModule = module[subKey];
+                            if (
+                                subModule && 
+                                typeof subModule === 'object' && 
+                                typeof subModule.handleDataProviderRequest === 'function'
+                            ) {
+                                globalScope.handleDataProviderRequest = subModule.handleDataProviderRequest;
+                                console.log(`✅ 从嵌套模块 '${key}.${subKey}' 导出处理函数到全局作用域`);
+                                return true;
+                            }
+                        } catch (innerErr) {
+                            // 忽略嵌套错误
+                        }
+                    }
+                }
+            } catch (err) {
+                // 忽略单个模块的访问错误并继续搜索
+            }
+        }
+        
+        console.warn('⚠️ 无法找到现有的API处理函数');
+        return false;
+    } catch (error) {
+        console.error('❌ 查找API处理函数时出错:', error);
+        return false;
+    }
+}
+
 function checkRealApiHandlerPresence() {
     if (typeof globalScope[REAL_API_HANDLER_NAME] !== 'function') {
         console.error(`❌ [Logger] 真实 API 请求处理函数 '${REAL_API_HANDLER_NAME}' 未在 globalScope 中找到!`);
         console.warn('[Logger] 请确保:');
         console.warn('  1. src/services/data-provider/api-service.ts 中的 handleDataProviderRequest 已正确导出。');
         console.warn('  2. 扩展的背景脚本 (service worker) 已导入并初始化了 API 服务 (调用了 initDataProviderAPI)。');
-        console.warn('  3. 如果API服务是模块化加载的，确保 ' + REAL_API_HANDLER_NAME + ' 被正确挂载到 globalScope 以便此调试脚本访问，或者考虑更高级的调试集成。');
+        console.warn('  3. 如果API服务是模块化加载的，确保 ' + REAL_API_HANDLER_NAME + ' 被正确挂载到 globalScope 以便此调试脚本访问。');
+        console.warn('');
+        console.warn('推荐解决方案:');
+        console.warn('  1. 尝试运行 exposeApiHandlerToGlobalScope() 函数来自动查找并导出函数');
+        console.warn('  2. 或者运行 quick-fix.js 脚本，它会自动尝试查找和修复这个问题');
+        console.warn('  3. 如果以上方法都不奏效，可能需要修改扩展的背景脚本以确保API处理函数被正确导出');
         return false;
     }
     console.info(`✅ [Logger] 真实 API 请求处理函数 '${REAL_API_HANDLER_NAME}' 已在 globalScope 中找到。`);
@@ -96,6 +180,12 @@ analyzeExistingListeners();
 console.log('添加此调试脚本监听器之前的状态:');
 console.log('- 外部消息监听器:', chrome.runtime.onMessageExternal.hasListeners() ? '已设置' : '未设置');
 console.log('- 内部消息监听器:', chrome.runtime.onMessage.hasListeners() ? '已设置' : '未设置');
+
+// 尝试查找并导出API处理函数
+exposeApiHandlerToGlobalScope();
+
+// 再次检查API处理函数是否存在
+checkRealApiHandlerPresence();
 
 // 保存原始监听器（如果需要恢复）
 let originalExternalListeners = [];
@@ -361,70 +451,6 @@ function inspectHandlers() {
     }
 }
 
-// 导出检查函数到全局作用域
-globalScope.inspectHandlers = inspectHandlers;
-
-// 显示保存的页面数据库信息
-globalScope.showPagesDatabaseInfo = async function() {
-    try {
-        console.log('🔍 正在检索SavedPagesDB信息...');
-        
-        // 尝试通过chrome.runtime.sendMessage获取页面计数
-        const testRequest = {
-            type: 'count',
-            entityType: 'page',
-            query: { filter: {} },
-            accessToken: globalScope.ACCESS_TOKEN || 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m',
-            clientId: 'logger_db_info_' + Date.now()
-        };
-        
-        console.log('发送页面计数请求...');
-        
-        if (checkRealApiHandlerPresence()) {
-            const response = await globalScope[REAL_API_HANDLER_NAME](testRequest, { id: chrome.runtime.id });
-            
-            if (response.success && response.data && typeof response.data.count === 'number') {
-                console.log(`✅ 数据库中有 ${response.data.count} 个保存的页面`);
-            } else {
-                console.warn('⚠️ 无法获取页面计数:', response);
-            }
-            
-            // 尝试获取一些页面以显示示例
-            if (response.success && response.data.count > 0) {
-                const listRequest = {
-                    type: 'list',
-                    entityType: 'page',
-                    query: { 
-                        filter: {}, 
-                        page: 1, 
-                        pageSize: 3,
-                        fields: ['id', 'title', 'url', 'tags', 'createdAt']
-                    },
-                    accessToken: globalScope.ACCESS_TOKEN || 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m',
-                    clientId: 'logger_db_info_' + Date.now()
-                };
-                
-                console.log('获取示例页面...');
-                
-                const listResponse = await globalScope[REAL_API_HANDLER_NAME](listRequest, { id: chrome.runtime.id });
-                
-                if (listResponse.success && Array.isArray(listResponse.data) && listResponse.data.length > 0) {
-                    console.log('✅ 示例页面:');
-                    listResponse.data.forEach((page, index) => {
-                        console.log(`页面 #${index + 1}:`, page);
-                    });
-                } else {
-                    console.warn('⚠️ 无法获取示例页面:', listResponse);
-                }
-            }
-        } else {
-            console.error('❌ API处理函数未找到，无法获取数据库信息');
-        }
-    } catch (error) {
-        console.error('❌ 获取数据库信息时出错:', error);
-    }
-};
-
 // 显示帮助信息
 function showHelp() {
     console.log('📖 Page Assist 数据提供者API日志记录器帮助');
@@ -435,7 +461,12 @@ function showHelp() {
     console.log('  testAllEntityTypes(type) - 测试所有实体类型的API');
     console.log('  inspectHandlers() - 检查API处理程序详情');
     console.log('  showPagesDatabaseInfo() - 显示保存的页面数据库信息');
+    console.log('  exposeApiHandlerToGlobalScope() - 尝试查找并导出API处理函数');
     console.log('  cleanupLoggerListeners() - 移除日志记录器监听器');
+    console.log('');
+    console.log('排除故障:');
+    console.log('  1. 如果看到 "真实API处理函数未找到" 错误，运行 exposeApiHandlerToGlobalScope()');
+    console.log('  2. 如果仍然无法解决，尝试在background page控制台中执行quick-fix.js脚本');
     console.log('');
     console.log('示例:');
     console.log('  testEntityType("page", "list") - 测试页面列表API');
@@ -446,6 +477,10 @@ function showHelp() {
 // 设置帮助函数
 globalScope.apiLoggerHelp = showHelp;
 
+// 导出检查函数到全局作用域
+globalScope.exposeApiHandlerToGlobalScope = exposeApiHandlerToGlobalScope;
+globalScope.inspectHandlers = inspectHandlers;
+
 // 最终初始化
 function finalizeLoggerSetup() {
     console.log('✅ Page Assist 数据提供者API日志记录器已安装');
@@ -455,8 +490,13 @@ function finalizeLoggerSetup() {
     console.log('- API处理程序:', typeof globalScope[REAL_API_HANDLER_NAME] === 'function' ? '已找到' : '未找到');
     console.log('');
     console.log('使用 apiLoggerHelp() 查看可用命令');
+    
+    // 如果API处理程序未找到，直接显示帮助信息
+    if (typeof globalScope[REAL_API_HANDLER_NAME] !== 'function') {
+        console.warn('❌ API处理程序未找到。请参考以下帮助信息:');
+        showHelp();
+    }
 }
 
 // 初始化检查和设置
-checkRealApiHandlerPresence();
 finalizeLoggerSetup();

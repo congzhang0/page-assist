@@ -7,17 +7,71 @@
 const ACCESS_TOKEN = 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m';
 
 // 检查真实API处理函数是否存在
-const globalScope = typeof self !== 'undefined' ? self : window;
+// 修改以支持Node.js环境（当直接用node运行此脚本时）
+const globalScope = typeof self !== 'undefined' ? self : 
+                    typeof window !== 'undefined' ? window : 
+                    typeof global !== 'undefined' ? global : this;
 const REAL_API_HANDLER_NAME = 'handleDataProviderRequest';
 
 // 检查真实API handler是否存在
 function checkRealApiHandlerPresence() {
+    // 在Node.js环境下运行时跳过此检查
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+        console.warn('⚠️ 此脚本在Node.js环境下运行。请在浏览器扩展的背景页控制台中运行以获取完整功能。');
+        return false;
+    }
+
     if (typeof globalScope[REAL_API_HANDLER_NAME] !== 'function') {
         console.error(`❌ 真实API处理函数 '${REAL_API_HANDLER_NAME}' 未在全局作用域中找到!`);
         return false;
     }
     console.info(`✅ 真实API处理函数 '${REAL_API_HANDLER_NAME}' 已找到。`);
     return true;
+}
+
+// 尝试找到实际的API处理函数并将其导出到全局作用域
+function exposeApiHandlerToGlobalScope() {
+    console.log('🔍 尝试在模块系统中查找API处理函数...');
+    
+    // 尝试从各种可能的位置查找处理函数
+    try {
+        // 尝试方法1: 从已加载的模块中直接寻找
+        if (typeof DataProviderAPI !== 'undefined' && typeof DataProviderAPI.handleDataProviderRequest === 'function') {
+            globalScope.handleDataProviderRequest = DataProviderAPI.handleDataProviderRequest;
+            console.log('✅ 从DataProviderAPI模块导出处理函数到全局作用域');
+            return true;
+        }
+        
+        // 尝试方法2: 从chrome.extension API中寻找
+        if (typeof chrome.extension !== 'undefined' && typeof chrome.extension.getBackgroundPage === 'function') {
+            const bgPage = chrome.extension.getBackgroundPage();
+            if (bgPage && typeof bgPage.handleDataProviderRequest === 'function') {
+                globalScope.handleDataProviderRequest = bgPage.handleDataProviderRequest;
+                console.log('✅ 从background page导出处理函数到全局作用域');
+                return true;
+            }
+        }
+        
+        // 尝试方法3: 查找所有导出的模块
+        for (const key in globalScope) {
+            const module = globalScope[key];
+            if (
+                typeof module === 'object' && 
+                module !== null && 
+                typeof module.handleDataProviderRequest === 'function'
+            ) {
+                globalScope.handleDataProviderRequest = module.handleDataProviderRequest;
+                console.log(`✅ 从全局模块 '${key}' 导出处理函数到全局作用域`);
+                return true;
+            }
+        }
+        
+        console.warn('⚠️ 无法找到现有的API处理函数');
+        return false;
+    } catch (error) {
+        console.error('❌ 查找API处理函数时出错:', error);
+        return false;
+    }
 }
 
 // 检查外部消息监听器状态
@@ -55,536 +109,24 @@ function checkExternallyConnectable() {
     }
 }
 
-// 如果真实API处理函数不存在，使用一个模拟实现
-function setupMockApiHandlerIfNeeded() {
-    if (!checkRealApiHandlerPresence()) {
-        console.warn('⚠️ 未找到真实API处理函数，将安装模拟实现作为后备...');
-        
-        // 定义一个模拟实现
-        globalScope[REAL_API_HANDLER_NAME] = async function(request, sender) {
-            console.log('📡 模拟API处理函数被调用:', request, sender);
-            
-            // 验证访问令牌
-            if (!request.accessToken || request.accessToken !== ACCESS_TOKEN) {
-                return {
-                    success: false,
-                    error: {
-                        code: 'auth_invalid_token',
-                        message: '无效的访问令牌'
-                    },
-                    meta: {
-                        serverTime: Date.now()
-                    }
-                };
-            }
-            
-            // 创建基本的元数据对象
-            const meta = {
-                serverTime: Date.now(),
-                clientId: request.clientId
-            };
-            
-            // 根据实体类型和请求类型返回模拟响应
-            switch(request.entityType) {
-                case 'page':
-                    return handleMockPageRequest(request, meta);
-                case 'document':
-                    return handleMockDocumentRequest(request, meta);
-                case 'model':
-                    return handleMockModelRequest(request, meta);
-                case 'knowledge':
-                    return handleMockKnowledgeRequest(request, meta);
-                case 'vector':
-                    return handleMockVectorRequest(request, meta);
-                case 'message':
-                    return handleMockMessageRequest(request, meta);
-                default:
-                    return {
-                        success: false,
-                        error: {
-                            code: 'unsupported_entity_type',
-                            message: `不支持的实体类型: ${request.entityType}`
-                        },
-                        meta
-                    };
-            }
-        };
-        
-        console.log('✅ 模拟API处理函数已安装为后备');
-    } else {
-        console.log('✅ 使用现有的真实API处理函数');
+// 尝试确保真实API处理函数可用
+function ensureRealApiHandler() {
+    // 尝试在模块系统中查找API处理函数并导出到全局
+    const foundRealHandler = exposeApiHandlerToGlobalScope();
+    
+    if (!foundRealHandler) {
+        const handlerExists = checkRealApiHandlerPresence();
+        if (!handlerExists) {
+            console.error('❌ 无法找到真实API处理函数，请确保已初始化数据提供者API');
+            console.log('🔧 建议：在背景脚本中添加如下代码：');
+            console.log('import { initDataProviderAPI } from \'@/services/data-provider/api-service\'');
+            console.log('initDataProviderAPI();');
+            return false;
+        }
     }
-}
-
-// 处理模拟页面请求
-function handleMockPageRequest(request, meta) {
-    switch(request.type) {
-        case 'count':
-            return {
-                success: true,
-                data: {
-                    count: 42 // 模拟数据
-                },
-                meta
-            };
-            
-        case 'list':
-            return {
-                success: true,
-                data: [
-                    {
-                        id: 'page_1',
-                        title: '模拟页面 1',
-                        url: 'https://example.com/page1',
-                        tags: ['标签1', '标签2'],
-                        createdAt: Date.now() - 86400000,
-                        updatedAt: Date.now() - 3600000
-                    },
-                    {
-                        id: 'page_2',
-                        title: '模拟页面 2',
-                        url: 'https://example.com/page2',
-                        tags: ['标签1'],
-                        createdAt: Date.now() - 172800000,
-                        updatedAt: Date.now() - 7200000
-                    }
-                ],
-                meta: {
-                    ...meta,
-                    total: 2,
-                    page: 1,
-                    pageSize: 10,
-                    pageCount: 1
-                }
-            };
-            
-        case 'get':
-            return {
-                success: true,
-                data: {
-                    id: request.id || 'page_1',
-                    title: '模拟页面详情',
-                    url: 'https://example.com/page-detail',
-                    content: '这是模拟的页面内容',
-                    html: '<div>这是模拟的HTML内容</div>',
-                    tags: ['标签1', '标签2', '标签3'],
-                    createdAt: Date.now() - 86400000,
-                    updatedAt: Date.now() - 3600000
-                },
-                meta
-            };
-            
-        case 'tags':
-            return {
-                success: true,
-                data: ['标签1', '标签2', '标签3', '重要', '待读'],
-                meta
-            };
-            
-        case 'sync':
-        case 'changes':
-            return {
-                success: true,
-                data: {
-                    changes: [
-                        {
-                            id: 'page_1',
-                            changeType: 'update',
-                            timestamp: Date.now() - 3600000,
-                            data: {
-                                id: 'page_1',
-                                title: '更新的模拟页面',
-                                tags: ['标签1', '新标签']
-                            }
-                        }
-                    ],
-                    hasMore: false
-                },
-                meta: {
-                    ...meta,
-                    syncTime: Date.now()
-                }
-            };
-            
-        default:
-            return {
-                success: false,
-                error: {
-                    code: 'invalid_request_type',
-                    message: `不支持的请求类型: ${request.type}`
-                },
-                meta
-            };
-    }
-}
-
-// 处理模拟文档请求
-function handleMockDocumentRequest(request, meta) {
-    switch(request.type) {
-        case 'count':
-            return {
-                success: true,
-                data: {
-                    count: 15 // 模拟数据
-                },
-                meta
-            };
-            
-        case 'list':
-            return {
-                success: true,
-                data: [
-                    {
-                        id: 'doc_1',
-                        title: '模拟文档 1',
-                        filePath: '/documents/doc1.pdf',
-                        tags: ['文档', 'PDF'],
-                        source: '本地上传',
-                        createdAt: Date.now() - 86400000,
-                        updatedAt: Date.now() - 3600000
-                    },
-                    {
-                        id: 'doc_2',
-                        title: '模拟文档 2',
-                        filePath: '/documents/doc2.docx',
-                        tags: ['文档', 'Word'],
-                        source: '本地上传',
-                        createdAt: Date.now() - 172800000,
-                        updatedAt: Date.now() - 7200000
-                    }
-                ],
-                meta: {
-                    ...meta,
-                    total: 2,
-                    page: 1,
-                    pageSize: 10,
-                    pageCount: 1
-                }
-            };
-            
-        case 'get':
-            return {
-                success: true,
-                data: {
-                    id: request.id || 'doc_1',
-                    title: '模拟文档详情',
-                    filePath: '/documents/doc-detail.pdf',
-                    content: '这是模拟的文档内容',
-                    tags: ['文档', 'PDF', '重要'],
-                    source: '本地上传',
-                    metadata: {
-                        pageCount: 12,
-                        author: '模拟作者'
-                    },
-                    createdAt: Date.now() - 86400000,
-                    updatedAt: Date.now() - 3600000
-                },
-                meta
-            };
-            
-        case 'sync':
-        case 'changes':
-            return {
-                success: true,
-                data: {
-                    changes: [
-                        {
-                            id: 'doc_1',
-                            changeType: 'update',
-                            timestamp: Date.now() - 3600000,
-                            data: {
-                                id: 'doc_1',
-                                title: '更新的模拟文档',
-                                tags: ['文档', '已更新']
-                            }
-                        }
-                    ],
-                    hasMore: false
-                },
-                meta: {
-                    ...meta,
-                    syncTime: Date.now()
-                }
-            };
-            
-        default:
-            return {
-                success: false,
-                error: {
-                    code: 'invalid_request_type',
-                    message: `不支持的请求类型: ${request.type}`
-                },
-                meta
-            };
-    }
-}
-
-// 处理模拟模型请求
-function handleMockModelRequest(request, meta) {
-    switch(request.type) {
-        case 'list':
-            return {
-                success: true,
-                data: [
-                    {
-                        id: 'model_1',
-                        name: 'GPT-4',
-                        provider: 'OpenAI',
-                        apiKeyStatus: 'valid',
-                        type: 'chat',
-                        isDefault: true,
-                        createdAt: Date.now() - 86400000,
-                        updatedAt: Date.now() - 3600000
-                    },
-                    {
-                        id: 'model_2',
-                        name: 'Claude 3',
-                        provider: 'Anthropic',
-                        apiKeyStatus: 'valid',
-                        type: 'chat',
-                        isDefault: false,
-                        createdAt: Date.now() - 172800000,
-                        updatedAt: Date.now() - 7200000
-                    }
-                ],
-                meta: {
-                    ...meta,
-                    total: 2,
-                    page: 1,
-                    pageSize: 10,
-                    pageCount: 1
-                }
-            };
-            
-        case 'get':
-            return {
-                success: true,
-                data: {
-                    id: request.id || 'model_1',
-                    name: '模拟模型详情',
-                    provider: 'OpenAI',
-                    apiKeyStatus: 'valid',
-                    type: 'chat',
-                    config: {
-                        temperature: 0.7,
-                        maxTokens: 4096
-                    },
-                    isDefault: true,
-                    createdAt: Date.now() - 86400000,
-                    updatedAt: Date.now() - 3600000
-                },
-                meta
-            };
-            
-        default:
-            return {
-                success: false,
-                error: {
-                    code: 'invalid_request_type',
-                    message: `不支持的请求类型: ${request.type}`
-                },
-                meta
-            };
-    }
-}
-
-// 处理模拟知识库请求
-function handleMockKnowledgeRequest(request, meta) {
-    switch(request.type) {
-        case 'list':
-            return {
-                success: true,
-                data: [
-                    {
-                        id: 'kb_1',
-                        name: '技术文档知识库',
-                        description: '包含各种技术文档',
-                        sourceType: 'file',
-                        status: 'completed',
-                        vectorCount: 256,
-                        createdAt: Date.now() - 86400000,
-                        updatedAt: Date.now() - 3600000
-                    },
-                    {
-                        id: 'kb_2',
-                        name: '网站知识库',
-                        description: '从网站收集的知识',
-                        sourceType: 'url',
-                        status: 'completed',
-                        vectorCount: 128,
-                        createdAt: Date.now() - 172800000,
-                        updatedAt: Date.now() - 7200000
-                    }
-                ],
-                meta: {
-                    ...meta,
-                    total: 2,
-                    page: 1,
-                    pageSize: 10,
-                    pageCount: 1
-                }
-            };
-            
-        case 'get':
-            return {
-                success: true,
-                data: {
-                    id: request.id || 'kb_1',
-                    name: '模拟知识库详情',
-                    description: '这是一个模拟的知识库，用于测试',
-                    sourceType: 'file',
-                    sourcePath: '/knowledge/tech-docs',
-                    status: 'completed',
-                    vectorCount: 256,
-                    createdAt: Date.now() - 86400000,
-                    updatedAt: Date.now() - 3600000
-                },
-                meta
-            };
-            
-        default:
-            return {
-                success: false,
-                error: {
-                    code: 'invalid_request_type',
-                    message: `不支持的请求类型: ${request.type}`
-                },
-                meta
-            };
-    }
-}
-
-// 处理模拟向量请求
-function handleMockVectorRequest(request, meta) {
-    switch(request.type) {
-        case 'list':
-            return {
-                success: true,
-                data: [
-                    {
-                        id: 'vector_1',
-                        knowledgeId: 'kb_1',
-                        contentChunk: '这是一段内容的向量化片段1',
-                        embedding: Array(128).fill(0).map(() => Math.random()),
-                        createdAt: Date.now() - 86400000,
-                        updatedAt: Date.now() - 3600000
-                    },
-                    {
-                        id: 'vector_2',
-                        knowledgeId: 'kb_1',
-                        contentChunk: '这是一段内容的向量化片段2',
-                        embedding: Array(128).fill(0).map(() => Math.random()),
-                        createdAt: Date.now() - 172800000,
-                        updatedAt: Date.now() - 7200000
-                    }
-                ],
-                meta: {
-                    ...meta,
-                    total: 2,
-                    page: 1,
-                    pageSize: 10,
-                    pageCount: 1
-                }
-            };
-            
-        case 'get':
-            return {
-                success: true,
-                data: {
-                    id: request.id || 'vector_1',
-                    knowledgeId: 'kb_1',
-                    contentChunk: '这是一段内容的向量化片段，用于测试向量查询',
-                    embedding: Array(128).fill(0).map(() => Math.random()),
-                    metadata: {
-                        source: '第5页',
-                        relevance: 0.89
-                    },
-                    createdAt: Date.now() - 86400000,
-                    updatedAt: Date.now() - 3600000
-                },
-                meta
-            };
-            
-        default:
-            return {
-                success: false,
-                error: {
-                    code: 'invalid_request_type',
-                    message: `不支持的请求类型: ${request.type}`
-                },
-                meta
-            };
-    }
-}
-
-// 处理模拟消息请求
-function handleMockMessageRequest(request, meta) {
-    switch(request.type) {
-        case 'list':
-            return {
-                success: true,
-                data: [
-                    {
-                        id: 'msg_1',
-                        chatId: 'chat_1',
-                        role: 'user',
-                        content: '你好，这是一条测试消息1',
-                        modelUsed: 'GPT-4',
-                        timestamp: Date.now() - 3600000,
-                        createdAt: Date.now() - 3600000,
-                        updatedAt: Date.now() - 3600000
-                    },
-                    {
-                        id: 'msg_2',
-                        chatId: 'chat_1',
-                        role: 'assistant',
-                        content: '你好！我是AI助手，很高兴为你服务。这是一条测试响应消息。',
-                        modelUsed: 'GPT-4',
-                        timestamp: Date.now() - 3500000,
-                        createdAt: Date.now() - 3500000,
-                        updatedAt: Date.now() - 3500000
-                    }
-                ],
-                meta: {
-                    ...meta,
-                    total: 2,
-                    page: 1,
-                    pageSize: 10,
-                    pageCount: 1
-                }
-            };
-            
-        case 'get':
-            return {
-                success: true,
-                data: {
-                    id: request.id || 'msg_1',
-                    chatId: 'chat_1',
-                    role: 'user',
-                    content: '这是一条详细的测试消息内容，用于测试消息查询API',
-                    modelUsed: 'GPT-4',
-                    timestamp: Date.now() - 3600000,
-                    feedback: 'good',
-                    metadata: {
-                        context: '主页对话',
-                        attachments: ['图片1']
-                    },
-                    createdAt: Date.now() - 3600000,
-                    updatedAt: Date.now() - 3600000
-                },
-                meta
-            };
-            
-        default:
-            return {
-                success: false,
-                error: {
-                    code: 'invalid_request_type',
-                    message: `不支持的请求类型: ${request.type}`
-                },
-                meta
-            };
-    }
+    
+    console.log('✅ 已确认API处理函数可用');
+    return true;
 }
 
 // 检查是否有外部消息监听器，如果没有则添加
@@ -595,22 +137,34 @@ function setupMessageListenerIfNeeded() {
             console.log('收到外部消息:', request, '来自:', sender);
             
             if (request && (request.accessToken || request.type === 'ping')) {
-                globalScope[REAL_API_HANDLER_NAME](request, sender)
-                    .then(response => {
-                        console.log('发送响应:', response);
-                        sendResponse(response);
-                    })
-                    .catch(error => {
-                        console.error('处理请求时出错:', error);
-                        sendResponse({
-                            success: false,
-                            error: {
-                                code: 'internal_error',
-                                message: error.message
-                            }
+                if (typeof globalScope[REAL_API_HANDLER_NAME] === 'function') {
+                    globalScope[REAL_API_HANDLER_NAME](request, sender)
+                        .then(response => {
+                            console.log('发送响应:', response);
+                            sendResponse(response);
+                        })
+                        .catch(error => {
+                            console.error('处理请求时出错:', error);
+                            sendResponse({
+                                success: false,
+                                error: {
+                                    code: 'internal_error',
+                                    message: error.message
+                                }
+                            });
                         });
+                    return true; // 表示将异步发送响应
+                } else {
+                    console.error('❌ 无法处理请求：API处理函数不存在');
+                    sendResponse({
+                        success: false,
+                        error: {
+                            code: 'handler_not_found',
+                            message: 'API处理函数未找到'
+                        }
                     });
-                return true; // 表示将异步发送响应
+                    return true;
+                }
             }
         });
         console.log('✅ 外部消息监听器已添加');
@@ -638,6 +192,11 @@ function testApi() {
     
     console.log(`📤 发送测试请求 (${entityType}):`, testRequest);
     
+    if (typeof globalScope[REAL_API_HANDLER_NAME] !== 'function') {
+        console.error('❌ 无法测试API：处理函数不存在。请确保API已正确初始化。');
+        return;
+    }
+    
     // 直接调用API处理函数进行测试
     globalScope[REAL_API_HANDLER_NAME](testRequest, { id: chrome.runtime.id })
         .then(response => {
@@ -654,6 +213,11 @@ function testAllEntityTypes() {
     const testType = 'list'; // 测试的请求类型
     
     console.log(`🧪 开始测试所有实体类型的API (${testType})...`);
+    
+    if (typeof globalScope[REAL_API_HANDLER_NAME] !== 'function') {
+        console.error('❌ 无法测试API：处理函数不存在。请确保API已正确初始化。');
+        return;
+    }
     
     entityTypes.forEach(entityType => {
         const testRequest = {
@@ -689,17 +253,57 @@ function testViaMessaging() {
     
     console.log('📩 通过消息传递测试API...');
     
-    chrome.runtime.sendMessage(
-        chrome.runtime.id, // 发送给自己
-        testRequest,
-        response => {
-            if (chrome.runtime.lastError) {
-                console.error('❌ 测试失败:', chrome.runtime.lastError);
+    // 添加一个临时消息监听器
+    const messageListener = (request, sender, sendResponse) => {
+        if (request && request.type === 'list' && request.entityType === 'page') {
+            console.log('✅ 收到测试消息:', request);
+            
+            // 使用已找到的API处理函数处理请求
+            if (typeof globalScope[REAL_API_HANDLER_NAME] === 'function') {
+                globalScope[REAL_API_HANDLER_NAME](request, sender)
+                    .then(response => {
+                        console.log('✅ 测试成功:', response);
+                        sendResponse(response);
+                    })
+                    .catch(error => {
+                        console.error('❌ 测试失败:', error);
+                        sendResponse({
+                            success: false,
+                            error: {
+                                code: 'internal_error',
+                                message: error.message
+                            }
+                        });
+                    });
+                return true; // 表示将异步发送响应
             } else {
-                console.log('✅ 测试成功:', response);
+                console.error('❌ 无法处理消息：API处理函数不存在');
+                sendResponse({
+                    success: false,
+                    error: {
+                        code: 'handler_not_found',
+                        message: 'API处理函数未找到'
+                    }
+                });
+                return true;
             }
         }
-    );
+    };
+    
+    // 注册临时监听器
+    chrome.runtime.onMessage.addListener(messageListener);
+    
+    // 向自己发送消息
+    chrome.runtime.sendMessage(testRequest, response => {
+        // 测试完成后移除临时监听器
+        chrome.runtime.onMessage.removeListener(messageListener);
+        
+        if (chrome.runtime.lastError) {
+            console.error('❌ 测试失败:', chrome.runtime.lastError);
+        } else {
+            console.log('✅ 测试成功:', response);
+        }
+    });
 }
 
 // 初始化：检查状态并进行必要的设置
@@ -712,8 +316,13 @@ function initialize() {
     // 检查消息监听器
     checkMessageListeners();
     
-    // 检查并设置API处理函数
-    setupMockApiHandlerIfNeeded();
+    // 确保真实API处理函数可用
+    const apiHandlerAvailable = ensureRealApiHandler();
+    
+    if (!apiHandlerAvailable) {
+        console.error('❌ 无法找到真实API处理函数，测试功能将不可用');
+        console.log('🔧 请检查背景脚本是否正确初始化数据提供者API');
+    }
     
     // 设置消息监听器
     setupMessageListenerIfNeeded();
@@ -723,6 +332,8 @@ function initialize() {
     console.log('- testApi(): 测试一个实体类型的API');
     console.log('- testAllEntityTypes(): 测试所有实体类型的API');
     console.log('- testViaMessaging(): 通过消息传递测试API');
+    console.log('- checkRealApiHandlerPresence(): 检查API处理函数是否存在');
+    console.log('- exposeApiHandlerToGlobalScope(): 尝试找到并导出API处理函数');
 }
 
 // 导出到全局作用域，使其可以从控制台访问
@@ -731,6 +342,7 @@ globalScope.testAllEntityTypes = testAllEntityTypes;
 globalScope.testViaMessaging = testViaMessaging;
 globalScope.checkMessageListeners = checkMessageListeners;
 globalScope.checkRealApiHandlerPresence = checkRealApiHandlerPresence;
+globalScope.exposeApiHandlerToGlobalScope = exposeApiHandlerToGlobalScope;
 
 // 自动运行初始化
 initialize(); 

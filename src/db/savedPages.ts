@@ -1,167 +1,556 @@
-import type { Page, QueryParams } from '@/types/data-provider'; // Assuming types are in data-provider
+/**
+ * 保存页面数据库模块
+ * 使用 IndexedDB 存储保存的网页内容
+ */
 import logger from '@/utils/logger';
+import { syncHooks } from './sync-hooks';
 
-const DB_NAME = 'SavedPagesDB';
+// 数据库名称和版本
+const DB_NAME = 'page-assist-saved-pages';
+const DB_VERSION = 1;
+
+// 存储对象名称
+const STORE_NAME = 'pages';
+
+// 保存的页面类型定义
+export interface SavedPage {
+  id: string;
+  title: string;
+  url: string;
+  content: string;
+  html: string;
+  type: string;
+  tags: string[];
+  notes: string;
+  summary?: string;       // 页面内容摘要
+  rating?: number;        // 内容质量评分（1-5星）
+  createdAt: number;
+  updatedAt: number;
+  favicon?: string;
+  screenshot?: string;
+}
+
+// 保存页面时的输入参数
+export interface SavePageParams {
+  title: string;
+  url: string;
+  content: string;
+  html: string;
+  type: string;
+  tags?: string[];
+  notes?: string;
+  summary?: string;       // 页面内容摘要
+  rating?: number;        // 内容质量评分（1-5星）
+  favicon?: string;
+  screenshot?: string;
+}
+
+// 查询参数
+export interface QueryParams {
+  tags?: string[];
+  searchText?: string;
+  limit?: number;
+  offset?: number;
+}
 
 /**
- * A mock/stub implementation of the SavedPagesDB.
- * Replace this with your actual IndexedDB or other database logic.
+ * 生成唯一ID
+ */
+export const generateID = () => {
+  return "page_xxxx-xxxx-xxx-xxxx".replace(/[x]/g, () => {
+    const r = Math.floor(Math.random() * 16);
+    return r.toString(16);
+  });
+};
+
+/**
+ * 打开数据库连接
+ */
+const openDatabase = (): Promise<IDBDatabase> => {
+  logger.debug(`正在打开数据库: ${DB_NAME}, 版本: ${DB_VERSION}`);
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = (event) => {
+      const error = request.error;
+      logger.error('打开数据库失败', {
+        errorName: error?.name,
+        errorMessage: error?.message
+      });
+      reject(new Error(`无法打开数据库: ${error?.message || '未知错误'}`));
+    };
+
+    request.onsuccess = (event) => {
+      logger.debug('数据库连接成功打开');
+      resolve(request.result);
+    };
+
+    request.onupgradeneeded = (event) => {
+      logger.info(`数据库升级: 从版本 ${event.oldVersion} 到 ${event.newVersion}`);
+      const db = request.result;
+
+      // 如果存储对象不存在，则创建
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        logger.info(`创建存储对象: ${STORE_NAME}`);
+        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+
+        // 创建索引
+        logger.debug('创建数据库索引');
+        store.createIndex('url', 'url', { unique: false });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+        store.createIndex('updatedAt', 'updatedAt', { unique: false });
+        store.createIndex('tags', 'tags', { unique: false, multiEntry: true });
+        logger.info('数据库结构初始化完成');
+      }
+    };
+  });
+};
+
+/**
+ * 保存页面数据库类
  */
 export class SavedPagesDB {
-  constructor() {
-    logger.info(`[${DB_NAME}] Initializing (STUB)`);
-    // In a real implementation, you would open/initialize the database here.
-  }
+  /**
+   * 保存页面到数据库
+   * 如果URL已存在，则更新现有记录
+   */
+  async savePage(params: SavePageParams): Promise<SavedPage> {
+    logger.debug('开始保存页面到数据库', {
+      title: params.title,
+      url: params.url,
+      type: params.type,
+      contentLength: params.content?.length,
+      htmlLength: params.html?.length,
+      hasScreenshot: !!params.screenshot
+    });
 
-  async getPageById(id: string): Promise<Page | null> {
-    logger.debug(`[${DB_NAME}] STUB: getPageById called with id:`, id);
-    // Simulate DB call
-    if (id === 'page_1') {
-      return {
-        id: 'page_1',
-        title: 'Mocked Page 1',
-        url: 'https://example.com/mock1',
-        content: 'This is mocked content for page 1.',
-        html: '<h1>Mocked Page 1</h1><p>Content</p>',
-        createdAt: Date.now() - 86400000 * 2,
-        updatedAt: Date.now() - 86400000,
-        tags: ['mock', 'test'],
-      } as Page;
+    try {
+      // 首先检查URL是否已存在
+      const existingPage = await this.getPageByUrl(params.url);
+
+      if (existingPage) {
+        logger.info('URL已存在，将更新现有记录', {
+          url: params.url,
+          existingId: existingPage.id
+        });
+
+        // 更新现有记录
+        const updatedPage = await this.updatePage(existingPage.id, {
+          title: params.title,
+          tags: params.tags,
+          notes: params.notes,
+          summary: params.summary,
+          rating: params.rating,
+          // 添加其他需要更新的字段
+          content: params.content,
+          html: params.html,
+          type: params.type,
+          favicon: params.favicon,
+          screenshot: params.screenshot
+        } as Partial<SavedPage>);
+
+        logger.info('成功更新现有页面', {
+          id: updatedPage.id,
+          url: updatedPage.url
+        });
+
+        return updatedPage;
+      }
+
+      // 如果URL不存在，则添加新记录
+      const db = await openDatabase();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+
+        transaction.onerror = (event) => {
+          const error = transaction.error;
+          logger.error('数据库事务错误', {
+            errorName: error?.name,
+            errorMessage: error?.message
+          });
+          reject(new Error(`数据库事务错误: ${error?.message || '未知错误'}`));
+        };
+
+        const now = Date.now();
+        const pageId = generateID();
+        logger.debug(`生成页面ID: ${pageId}`);
+
+        const page: SavedPage = {
+          id: pageId,
+          title: params.title,
+          url: params.url,
+          content: params.content,
+          html: params.html,
+          type: params.type,
+          tags: params.tags || [],
+          notes: params.notes || '',
+          summary: params.summary,
+          rating: params.rating,
+          createdAt: now,
+          updatedAt: now,
+          favicon: params.favicon,
+          screenshot: params.screenshot
+        };
+
+        logger.debug('准备添加新页面到数据库', { id: page.id });
+        const request = store.add(page);
+
+        request.onsuccess = () => {
+          logger.info('新页面成功保存到数据库', { id: page.id, title: page.title });
+          syncHooks.page.afterCreate(page); // 调用同步钩子
+          resolve(page);
+        };
+
+        request.onerror = () => {
+          const error = request.error;
+          logger.error('保存页面失败', {
+            errorName: error?.name,
+            errorMessage: error?.message
+          });
+          reject(new Error(`保存页面失败: ${error?.message || '未知错误'}`));
+        };
+
+        transaction.oncomplete = () => {
+          logger.debug('数据库事务完成，关闭数据库连接');
+          db.close();
+        };
+      });
+    } catch (error) {
+      logger.error('保存页面过程中发生错误', error);
+      throw error;
     }
-    return null;
-  }
-
-  async getAllPages(queryParams?: QueryParams): Promise<Page[]> {
-    logger.debug(`[${DB_NAME}] STUB: getAllPages called with queryParams:`, queryParams);
-    // Simulate DB call, returning a list of pages
-    // This should implement filtering, pagination, sorting based on queryParams
-    const mockPage1: Page = {
-      id: 'page_1',
-      title: 'Mocked Page 1',
-      url: 'https://example.com/mock1',
-      createdAt: Date.now() - 86400000 * 2, // 2 days ago
-      updatedAt: Date.now() - 86400000,    // 1 day ago
-      tags: ['mock', 'test'],
-    };
-    const mockPage2: Page = {
-      id: 'page_2',
-      title: 'Another Mocked Page',
-      url: 'https://example.com/another',
-      createdAt: Date.now() - 86400000 * 3, // 3 days ago
-      updatedAt: Date.now() - 86400000 * 1, // 1 day ago (same as page_1 for testing sync)
-      tags: ['mock', 'data'],
-    };
-    const mockPage3: Page = {
-        id: 'page_3',
-        title: 'Very Recent Page',
-        url: 'https://example.com/recent',
-        createdAt: Date.now() - 3600000, // 1 hour ago
-        updatedAt: Date.now() - 3600000, // 1 hour ago (created === updated)
-        tags: ['new'],
-      };
-
-    let pages = [mockPage1, mockPage2, mockPage3];
-
-    if (queryParams?.search) {
-        pages = pages.filter(p => 
-            p.title?.toLowerCase().includes(queryParams.search!.toLowerCase()) ||
-            p.content?.toLowerCase().includes(queryParams.search!.toLowerCase())
-        );
-    }
-    
-    // Basic pagination
-    const page = queryParams?.page || 1;
-    const pageSize = queryParams?.pageSize || 10;
-    const startIndex = (page - 1) * pageSize;
-    pages = pages.slice(startIndex, startIndex + pageSize);
-
-    return pages;
-  }
-
-  async getPageCount(filter?: Record<string, any>): Promise<number> {
-    logger.debug(`[${DB_NAME}] STUB: getPageCount called with filter:`, filter);
-    // Simulate DB call for count
-    // This should respect the filter
-    return 3; // Assuming 3 total mock pages for now
   }
 
   /**
-   * Stub for fetching pages for synchronization.
-   * @param lastSyncTime Timestamp of the last sync.
-   * @param maxRecords Maximum number of records to return.
-   * @param metadataOnly If true, only return metadata (e.g., for 'changes' request).
-   *                     This parameter is an assumption for this stub.
-   * @returns A promise resolving to an array of pages.
+   * 获取所有保存的页面
    */
-  async getPagesForSync(lastSyncTime: number, maxRecords: number, metadataOnly: boolean = false): Promise<Partial<Page>[]> {
-    logger.debug(`[${DB_NAME}] STUB: getPagesForSync called`, {
-      lastSyncTime,
-      maxRecords,
-      metadataOnly,
+  async getAllPages(params?: QueryParams): Promise<SavedPage[]> {
+    const db = await openDatabase();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const index = store.index('updatedAt');
+
+      const request = index.openCursor(null, 'prev');
+      const pages: SavedPage[] = [];
+
+      request.onsuccess = (event) => {
+        const cursor = request.result;
+
+        if (cursor) {
+          const page = cursor.value as SavedPage;
+
+          // 如果有查询参数，进行过滤
+          let shouldInclude = true;
+
+          if (params) {
+            // 按标签过滤
+            if (params.tags && params.tags.length > 0) {
+              shouldInclude = params.tags.some(tag => page.tags.includes(tag));
+            }
+
+            // 按搜索文本过滤
+            if (shouldInclude && params.searchText) {
+              const searchText = params.searchText.toLowerCase();
+              shouldInclude =
+                page.title.toLowerCase().includes(searchText) ||
+                page.content.toLowerCase().includes(searchText) ||
+                page.notes.toLowerCase().includes(searchText);
+            }
+          }
+
+          if (shouldInclude) {
+            pages.push(page);
+          }
+
+          cursor.continue();
+        } else {
+          // 应用分页
+          if (params && (params.offset !== undefined || params.limit !== undefined)) {
+            const offset = params.offset || 0;
+            const limit = params.limit || pages.length;
+            resolve(pages.slice(offset, offset + limit));
+          } else {
+            resolve(pages);
+          }
+        }
+      };
+
+      request.onerror = () => {
+        reject(new Error('获取页面失败'));
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+      };
+    });
+  }
+
+  /**
+   * 根据ID获取页面
+   */
+  async getPageById(id: string): Promise<SavedPage | null> {
+    const db = await openDatabase();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+
+      const request = store.get(id);
+
+      request.onsuccess = () => {
+        resolve(request.result || null);
+      };
+
+      request.onerror = () => {
+        reject(new Error('获取页面失败'));
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+      };
+    });
+  }
+
+  /**
+   * 根据URL获取页面
+   * @param url 页面URL
+   * @returns 匹配的页面，如果没有找到则返回null
+   */
+  async getPageByUrl(url: string): Promise<SavedPage | null> {
+    logger.debug('根据URL查找页面', { url });
+
+    try {
+      // 获取所有页面
+      const pages = await this.getAllPages();
+
+      // 查找完全匹配URL的页面
+      const exactMatch = pages.find(page => page.url === url);
+      if (exactMatch) {
+        logger.debug('找到完全匹配的页面', { id: exactMatch.id, url });
+        return exactMatch;
+      }
+
+      logger.debug('未找到匹配的页面', { url });
+      return null;
+    } catch (error) {
+      logger.error('根据URL查找页面失败', error);
+      return null;
+    }
+  }
+
+  /**
+   * 更新页面
+   */
+  async updatePage(id: string, updates: Partial<SavedPage>): Promise<SavedPage> {
+    const db = await openDatabase();
+
+    return new Promise(async (resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+
+      // 先获取现有页面
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        if (!getRequest.result) {
+          reject(new Error('页面不存在'));
+          return;
+        }
+
+        const page = getRequest.result as SavedPage;
+        const updatedPage: SavedPage = {
+          ...page,
+          ...updates,
+          updatedAt: Date.now()
+        };
+
+        const updateRequest = store.put(updatedPage);
+
+        updateRequest.onsuccess = () => {
+          syncHooks.page.afterUpdate(updatedPage); // 调用同步钩子
+          resolve(updatedPage);
+        };
+
+        updateRequest.onerror = () => {
+          reject(new Error('更新页面失败'));
+        };
+      };
+
+      getRequest.onerror = () => {
+        reject(new Error('获取页面失败'));
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+      };
+    });
+  }
+
+  /**
+   * 删除页面
+   */
+  async deletePage(id: string): Promise<void> {
+    const db = await openDatabase();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+
+      const request = store.delete(id);
+
+      request.onsuccess = () => {
+        syncHooks.page.afterDelete(id); // 调用同步钩子
+        resolve();
+      };
+
+      request.onerror = () => {
+        reject(new Error('删除页面失败'));
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+      };
+    });
+  }
+
+  /**
+   * 获取所有标签
+   */
+  async getAllTags(): Promise<string[]> {
+    const pages = await this.getAllPages();
+    const tagSet = new Set<string>();
+
+    pages.forEach(page => {
+      page.tags.forEach(tag => tagSet.add(tag));
     });
 
-    const allMockPages: Page[] = [
-      {
-        id: 'page_1',
-        title: 'Mocked Page 1 (Updated)',
-        url: 'https://example.com/mock1',
-        content: 'Updated content.',
-        createdAt: Date.now() - 86400000 * 2,
-        updatedAt: Date.now() - 3600000 * 5, // Updated 5 hours ago
-        tags: ['mock', 'updated'],
-      },
-      {
-        id: 'page_2',
-        title: 'Another Mocked Page (No Recent Update)',
-        url: 'https://example.com/another',
-        createdAt: Date.now() - 86400000 * 3,
-        updatedAt: Date.now() - 86400000 * 2, // Updated 2 days ago (before typical lastSyncTime)
-        tags: ['mock', 'data'],
-      },
-      {
-        id: 'page_3',
-        title: 'Newly Created Page',
-        url: 'https://example.com/new',
-        createdAt: Date.now() - 3600000 * 2, // Created 2 hours ago
-        updatedAt: Date.now() - 3600000 * 2, // Created === Updated
-        tags: ['new', 'sync_test'],
-      },
-      {
-        id: 'page_4',
-        title: 'Very Recent Update',
-        url: 'https://example.com/recent_update',
-        createdAt: Date.now() - 86400000 * 5, // Created 5 days ago
-        updatedAt: Date.now() - 60000 * 30,   // Updated 30 minutes ago
-        tags: ['recent'],
-      },
-    ];
-
-    // Filter pages updated since lastSyncTime
-    const pagesToSync = allMockPages
-      .filter(page => page.updatedAt! > lastSyncTime) // Ensure updatedAt is always present
-      .sort((a, b) => a.updatedAt! - b.updatedAt!) // Sort by update time, oldest first
-      .slice(0, maxRecords);
-
-    if (metadataOnly) {
-      return pagesToSync.map(page => ({
-        id: page.id,
-        updatedAt: page.updatedAt,
-        createdAt: page.createdAt, // To help determine if it's a create or update
-        // Potentially other minimal fields like title or changeType if stored in DB
-      }));
-    }
-
-    return pagesToSync;
+    return Array.from(tagSet);
   }
-  
-  // Example for a custom 'list_tags' if you were to implement it
-  // async getAllUniqueTags(): Promise<string[]> {
-  //   logger.debug(`[${DB_NAME}] STUB: getAllUniqueTags called`);
-  //   const allPages = await this.getAllPages();
-  //   const tagSet = new Set<string>();
-  //   allPages.forEach(page => page.tags?.forEach(tag => tagSet.add(tag)));
-  //   return Array.from(tagSet).sort();
-  // }
+
+  /**
+   * 获取符合过滤条件的页面数量
+   * @param filter 过滤条件
+   * @returns 返回符合条件的页面数量
+   */
+  async getPageCount(filter?: Record<string, any>): Promise<number> {
+    logger.debug('获取页面计数', { filter });
+    
+    try {
+      // 使用与 getAllPages 相同的过滤逻辑，但只返回计数
+      const params: QueryParams = {};
+      
+      // 如果有标签过滤，转换过滤条件
+      if (filter && filter.tags) {
+        params.tags = Array.isArray(filter.tags) ? filter.tags : [filter.tags];
+      }
+      
+      // 如果有搜索过滤
+      if (filter && filter.searchText) {
+        params.searchText = filter.searchText;
+      }
+      
+      // 获取所有符合条件的页面
+      const pages = await this.getAllPages(params);
+      
+      return pages.length;
+    } catch (error) {
+      logger.error('获取页面计数失败', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取需要同步的页面
+   * @param lastSyncTime 上次同步时间戳
+   * @param maxRecords 最大返回记录数
+   * @param metadataOnly 是否只返回元数据
+   * @returns 返回需要同步的页面列表
+   */
+  async getPagesForSync(
+    lastSyncTime: number, 
+    maxRecords: number, 
+    metadataOnly: boolean = false
+  ): Promise<Partial<SavedPage>[]> {
+    logger.debug('获取需要同步的页面', {
+      lastSyncTime,
+      maxRecords,
+      metadataOnly
+    });
+    
+    try {
+      const db = await openDatabase();
+      
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const index = store.index('updatedAt');
+        
+        // 使用 IDBKeyRange 获取自上次同步以来的更新
+        const range = IDBKeyRange.lowerBound(lastSyncTime, false);
+        const request = index.openCursor(range);
+        
+        const pages: Partial<SavedPage>[] = [];
+        
+        request.onsuccess = (event) => {
+          const cursor = request.result;
+          
+          if (cursor) {
+            const page = cursor.value as SavedPage;
+            
+            if (metadataOnly) {
+              // 只返回元数据
+              pages.push({
+                id: page.id,
+                title: page.title,
+                url: page.url,
+                tags: page.tags,
+                createdAt: page.createdAt,
+                updatedAt: page.updatedAt
+              });
+            } else {
+              // 返回完整页面数据
+              pages.push(page);
+            }
+            
+            // 如果还没达到最大记录数，继续获取下一条
+            if (pages.length < maxRecords) {
+              cursor.continue();
+            } else {
+              logger.debug(`已达到最大记录数 ${maxRecords}，停止获取更多记录`);
+              resolve(pages);
+            }
+          } else {
+            // 没有更多记录
+            logger.debug(`获取到 ${pages.length} 条需要同步的页面`);
+            resolve(pages);
+          }
+        };
+        
+        request.onerror = () => {
+          const error = request.error;
+          logger.error('获取需要同步的页面失败', {
+            errorName: error?.name,
+            errorMessage: error?.message
+          });
+          reject(new Error(`获取需要同步的页面失败: ${error?.message || '未知错误'}`));
+        };
+        
+        transaction.oncomplete = () => {
+          logger.debug('数据库事务完成，关闭数据库连接');
+          db.close();
+        };
+      });
+    } catch (error) {
+      logger.error('获取需要同步的页面过程中发生错误', error);
+      throw error;
+    }
+  }
 }
 
-logger.info(`[${DB_NAME}] STUB DB Loaded.`); 
+// 导出单例实例
+export const savedPagesDB = new SavedPagesDB();

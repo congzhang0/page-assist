@@ -47,6 +47,13 @@ export function initDataProviderAPI(): void {
     chrome.runtime.onMessageExternal.addListener(externalApiRequestListener);
     logger.info(`[${SERVICE_NAME}] External API request listener registered.`);
   }
+  
+  // 为了调试目的，将处理函数暴露到全局作用域
+  const globalScope = typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : global);
+  if (globalScope) {
+    globalScope.handleDataProviderRequest = handleDataProviderRequest;
+    logger.debug(`[${SERVICE_NAME}] API handler exposed to global scope for debugging.`);
+  }
 }
 
 /**
