@@ -13,6 +13,11 @@ const globalScope = typeof self !== 'undefined' ? self :
                     typeof global !== 'undefined' ? global : this;
 const REAL_API_HANDLER_NAME = 'handleDataProviderRequest';
 
+// 检测是否在Service Worker环境中运行
+function isServiceWorkerEnvironment() {
+    return typeof window === 'undefined' && typeof self !== 'undefined' && typeof importScripts === 'function';
+}
+
 // 检查真实API handler是否存在
 function checkRealApiHandlerPresence() {
     // 在Node.js环境下运行时跳过此检查
@@ -252,7 +257,43 @@ function testViaMessaging() {
     };
     
     console.log('📩 通过消息传递测试API...');
+
+    // Service Worker环境中的替代测试方法
+    if (isServiceWorkerEnvironment()) {
+        console.log('🔧 检测到Service Worker环境，使用模拟消息测试...');
+        
+        // 直接创建一个模拟的MessageSender对象
+        const mockSender = { id: chrome.runtime.id };
+        
+        // 直接调用消息处理函数，模拟接收到消息
+        if (typeof globalScope[REAL_API_HANDLER_NAME] === 'function') {
+            // 创建一个模拟的sendResponse函数
+            const mockSendResponse = (response) => {
+                console.log('✅ Service Worker环境测试成功:', response);
+            };
+            
+            try {
+                // 模拟onMessageExternal监听器的处理流程
+                const keepAlive = chrome.runtime.onMessageExternal.hasListeners();
+                console.log('模拟外部消息处理，当前监听器状态:', keepAlive ? '已设置' : '未设置');
+                
+                globalScope[REAL_API_HANDLER_NAME](testRequest, mockSender)
+                    .then(response => {
+                        console.log('✅ Service Worker环境测试成功:', response);
+                    })
+                    .catch(error => {
+                        console.error('❌ Service Worker环境测试失败:', error);
+                    });
+            } catch (error) {
+                console.error('❌ Service Worker环境测试失败:', error);
+            }
+        } else {
+            console.error('❌ 无法在Service Worker环境中测试：API处理函数不存在');
+        }
+        return;
+    }
     
+    // 以下是原有的基于window环境的测试代码
     // 添加一个临时消息监听器
     const messageListener = (request, sender, sendResponse) => {
         if (request && request.type === 'list' && request.entityType === 'page') {
@@ -309,6 +350,13 @@ function testViaMessaging() {
 // 初始化：检查状态并进行必要的设置
 function initialize() {
     console.log('🚀 初始化数据提供者API快速修复工具...');
+    
+    // 检查环境类型
+    if (isServiceWorkerEnvironment()) {
+        console.log('📌 检测到正在Service Worker环境中运行');
+    } else {
+        console.log('📌 检测到正在标准浏览器环境中运行');
+    }
     
     // 检查externally_connectable配置
     checkExternallyConnectable();
