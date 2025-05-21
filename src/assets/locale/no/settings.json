@@ -59,12 +59,12 @@
       }
     },
     "sidepanelRag": {
-      "heading": "Copilot Chat med Nettsted Innstillinger",
+      "heading": "Gjenfinningsinnstillinger",
       "ragEnabled": {
-        "label": "Chat med nettstedet ved bruk av vektorinnleggelser (vector embeddings)"
+        "label": "Aktiver Innbygging og Gjenfinning"
       },
       "maxWebsiteContext": {
-        "label": "Normal nettstedinnholds størrelse",
+        "label": "Maksimal Innholdsstørrelse for Full Kontekst Modus",
         "placeholder": "Innholdsstørrelse (standard 4028)"
       }
     },
@@ -120,6 +120,9 @@
       "heading": "Tekst-til-tale Innstillinger",
       "ttsEnabled": {
         "label": "Legg til Tekst-til-Tale"
+      },
+      "ttsAutoPlay": {
+        "label": "Automatisk avspilling av stemmerespons etter fullføring"
       },
       "ttsProvider": {
         "label": "Tekst-til-Tale Tilbyder",
