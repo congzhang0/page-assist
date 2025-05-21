@@ -1,15 +1,170 @@
 /**
  * Page Assist 数据提供者API测试
  * 这是一个测试脚本，用于测试数据提供者API
+ * 修复版本 - 支持多种环境下的测试
  */
+
+// 全局配置
+const CONFIG = {
+  // 扩展ID，需要与实际的Page Assist扩展ID匹配
+  EXTENSION_ID: 'ffiigpcapfgmbpcggdfklpikceehbffd',  
+  // 访问令牌，需要与扩展配置中的令牌匹配
+  ACCESS_TOKEN: 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m',
+  // 客户端ID，用于标识当前客户端
+  CLIENT_ID: 'client_' + Math.random().toString(36).substring(2, 15),
+  // 运行模式: 'web'(普通网页), 'extension'(扩展内部), 'service-worker'(服务工作线程)
+  RUN_MODE: null,
+  // 调试模式，启用更多日志
+  DEBUG: true
+};
+
+// 全局状态
+const STATE = {
+  // 扩展连接状态
+  extensionConnected: false,
+  // API处理函数可用状态
+  apiHandlerAvailable: false,
+  // Chrome API可用状态
+  chromeApiAvailable: false,
+  // 上次同步时间
+  lastSyncTime: 0
+};
+
+// 日志函数
+function log(...args) {
+  if (CONFIG.DEBUG) {
+    console.log('[Page Assist API]', ...args);
+  }
+}
+
+function logError(...args) {
+  console.error('[Page Assist API Error]', ...args);
+}
+
+function logWarning(...args) {
+  console.warn('[Page Assist API Warning]', ...args);
+}
+
+// 检测运行环境并设置运行模式
+function detectEnvironment() {
+  // 检查是否在ServiceWorker环境
+  const isServiceWorker = typeof self !== 'undefined' && typeof window === 'undefined' && typeof importScripts === 'function';
+  
+  // 检查Chrome API可用性
+  const hasChromeRuntime = typeof chrome !== 'undefined' && chrome && chrome.runtime;
+  
+  // 检查扩展环境
+  const isExtension = hasChromeRuntime && chrome.runtime.id;
+  
+  if (isServiceWorker) {
+    CONFIG.RUN_MODE = 'service-worker';
+    log('检测到在Service Worker环境中运行');
+  } else if (isExtension) {
+    CONFIG.RUN_MODE = 'extension';
+    log('检测到在扩展页面中运行');
+  } else {
+    CONFIG.RUN_MODE = 'web';
+    log('检测到在普通网页中运行');
+  }
+  
+  return CONFIG.RUN_MODE;
+}
+
+// 安全地访问chrome API
+const chromeAPI = {
+  runtime: {
+    // 安全地发送消息
+    sendMessage: (extensionId, message, options, callback) => {
+      try {
+        // 检查Chrome API可用性
+        if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+          const error = new Error('Chrome消息API不可用');
+          if (callback) callback({ success: false, error: { message: error.message } });
+          return Promise.reject(error);
+        }
+        
+        // 处理参数的不同组合
+        if (typeof extensionId === 'object' && !message) {
+          // 格式: sendMessage(message, callback)
+          return new Promise((resolve) => {
+            chrome.runtime.sendMessage(extensionId, (response) => {
+              const lastError = chrome.runtime.lastError;
+              if (lastError) {
+                logError('消息发送错误:', lastError);
+                resolve({ success: false, error: { message: lastError.message } });
+              } else {
+                resolve(response || { success: false, error: { message: '无响应' } });
+              }
+            });
+          });
+        } else {
+          // 标准格式或其他组合
+          return new Promise((resolve) => {
+            const sendCallback = (response) => {
+              const lastError = chrome.runtime.lastError;
+              if (lastError) {
+                logError('消息发送错误:', lastError);
+                resolve({ success: false, error: { message: lastError.message } });
+              } else {
+                resolve(response || { success: false, error: { message: '无响应' } });
+              }
+            };
+            
+            // 根据运行模式和参数，使用不同的调用方式
+            if (CONFIG.RUN_MODE === 'extension') {
+              chrome.runtime.sendMessage(message, sendCallback);
+            } else {
+              chrome.runtime.sendMessage(extensionId, message, options || {}, sendCallback);
+            }
+          });
+        }
+      } catch (error) {
+        logError('发送消息时出现异常:', error);
+        return Promise.reject(error);
+      }
+    },
+    
+    // 安全地调用getBackgroundPage
+    getBackgroundPage: (callback) => {
+      return new Promise((resolve, reject) => {
+        try {
+          if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getBackgroundPage) {
+            const error = new Error('chrome.runtime.getBackgroundPage不可用');
+            if (callback) callback(null);
+            reject(error);
+            return;
+          }
+          
+          chrome.runtime.getBackgroundPage((bg) => {
+            if (chrome.runtime.lastError) {
+              if (callback) callback(null);
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              if (callback) callback(bg);
+              resolve(bg);
+            }
+          });
+        } catch (error) {
+          if (callback) callback(null);
+          reject(error);
+        }
+      });
+    }
+  }
+};
 
 // 检查环境和Chrome API可用性
 const checkEnvironment = () => {
-  console.log('检查测试环境...');
+  log('检查测试环境...');
   
-  // 检查是否在浏览器环境中
-  if (typeof window === 'undefined') {
-    return '错误: 此脚本必须在浏览器环境中运行。';
+  // 确保已检测环境
+  if (!CONFIG.RUN_MODE) {
+    detectEnvironment();
+  }
+  
+  // 必要的环境检查
+  if (typeof window === 'undefined' && CONFIG.RUN_MODE !== 'service-worker') {
+    return '错误: 此脚本必须在浏览器环境或Service Worker中运行。';
   }
   
   // 检查chrome对象是否存在
@@ -22,96 +177,161 @@ const checkEnvironment = () => {
     return '错误: 未检测到chrome.runtime对象。请确保在Chrome浏览器中运行此脚本。';
   }
   
-  // 检查chrome.runtime.sendMessage是否存在
-  if (typeof chrome.runtime.sendMessage !== 'function') {
-    return '错误: chrome.runtime.sendMessage方法不可用。可能是由于以下原因：\n' +
-           '1. 此页面不是作为扩展的一部分加载的\n' +
-           '2. 缺少适当的权限\n' +
-           '3. 在本地文件URL中打开，需要通过Web服务器访问';
+  // 根据运行模式进行特定检查
+  if (CONFIG.RUN_MODE === 'web') {
+    // 普通网页模式下检查sendMessage
+    if (typeof chrome.runtime.sendMessage !== 'function') {
+      return '错误: chrome.runtime.sendMessage方法不可用。可能是由于以下原因：\n' +
+             '1. 此页面通过file://协议加载，请使用Web服务器访问\n' +
+             '2. 缺少适当的权限\n' +
+             '3. 扩展的externally_connectable配置可能不正确';
+    }
+  } else if (CONFIG.RUN_MODE === 'extension') {
+    // 扩展内部模式检查
+    if (typeof chrome.runtime.getBackgroundPage !== 'function') {
+      logWarning('chrome.runtime.getBackgroundPage不可用，但可以继续使用');
+    }
   }
   
-  console.log('环境检查通过: Chrome API可用');
+  STATE.chromeApiAvailable = true;
+  log('环境检查通过: Chrome API可用');
   return null;
 };
-
-// 扩展ID，已替换为实际的Page Assist扩展ID
-const EXTENSION_ID = 'ffiigpcapfgmbpcggdfklpikceehbffd';
-
-// 访问令牌，已替换为实际的访问令牌
-const ACCESS_TOKEN = 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m';
-
-// 客户端ID，用于标识当前客户端
-const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 15);
 
 // 检查扩展是否可用
 const checkExtension = async () => {
   try {
-    console.log(`检查扩展ID: ${EXTENSION_ID} 是否可用...`);
+    log(`检查扩展ID: ${CONFIG.EXTENSION_ID} 是否可用...`);
     
-    return new Promise((resolve) => {
+    // 确保Chrome API可用
+    if (!STATE.chromeApiAvailable) {
+      const envCheck = checkEnvironment();
+      if (envCheck) {
+        return envCheck;
+      }
+    }
+    
+    // 根据运行模式使用不同的检查方法
+    if (CONFIG.RUN_MODE === 'extension') {
+      // 在扩展内部，尝试直接调用API处理函数
       try {
-        // 尝试向扩展发送一个简单的ping消息
-        chrome.runtime.sendMessage(
-          EXTENSION_ID,
-          { type: 'ping' },
-          response => {
-            if (chrome.runtime.lastError) {
-              console.error('扩展检查错误:', chrome.runtime.lastError);
-              resolve(`错误: 无法连接到扩展。原因: ${chrome.runtime.lastError.message}`);
-            } else {
-              console.log('扩展连接成功:', response);
-              resolve(null);
+        // 尝试获取背景页
+        let backgroundPage = null;
+        try {
+          backgroundPage = await chromeAPI.runtime.getBackgroundPage();
+        } catch (err) {
+          logWarning('获取背景页失败，将尝试其他方法', err);
+        }
+        
+        if (backgroundPage && typeof backgroundPage.handleDataProviderRequest === 'function') {
+          log('✅ 扩展内部API处理函数可用');
+          STATE.apiHandlerAvailable = true;
+          STATE.extensionConnected = true;
+          return null;
+        } else {
+          logWarning('⚠️ 未找到API处理函数，将尝试通过消息传递');
+        }
+      } catch (err) {
+        logWarning('⚠️ 访问背景页失败，将尝试通过消息传递', err);
+      }
+    } else if (CONFIG.RUN_MODE === 'service-worker') {
+      // Service Worker环境 - 尝试直接调用API
+      log('检测到Service Worker环境，尝试直接调用API');
+      
+      // 尝试查找API处理函数
+      if (typeof self.handleDataProviderRequest !== 'function') {
+        // 尝试从DataProviderAPI模块找到并导出
+        if (typeof self.DataProviderAPI !== 'undefined' && 
+            typeof self.DataProviderAPI.handleDataProviderRequest === 'function') {
+          self.handleDataProviderRequest = self.DataProviderAPI.handleDataProviderRequest;
+          log('成功找到并导出API处理函数');
+        } else {
+          // 搜索所有模块
+          for (const key in self) {
+            const module = self[key];
+            if (typeof module === 'object' && module !== null && 
+                typeof module.handleDataProviderRequest === 'function') {
+              self.handleDataProviderRequest = module.handleDataProviderRequest;
+              log(`从${key}模块导出API处理函数`);
+              break;
             }
           }
-        );
-      } catch (error) {
-        console.error('发送ping消息时出错:', error);
-        resolve(`错误: 发送消息时出现异常: ${error.message}`);
+        }
       }
-    });
+      
+      // 如果找到了处理函数，直接调用它
+      if (typeof self.handleDataProviderRequest === 'function') {
+        log('直接调用API处理函数进行测试');
+        
+        const testRequest = {
+          type: 'list',
+          entityType: 'page',
+          query: { filter: {}, page: 1, pageSize: 1 },
+          accessToken: CONFIG.ACCESS_TOKEN,
+          clientId: CONFIG.CLIENT_ID
+        };
+        
+        const sender = { id: chrome.runtime.id };
+        try {
+          const response = await self.handleDataProviderRequest(testRequest, sender);
+          
+          if (response && response.success) {
+            log('✅ API处理函数调用成功:', response);
+            STATE.extensionConnected = true;
+            STATE.apiHandlerAvailable = true;
+            return null;
+          } else {
+            logError('❌ API处理函数调用失败:', response);
+            return '错误: API处理函数返回错误或无响应';
+          }
+        } catch (error) {
+          logError('❌ API处理函数执行出错:', error);
+          return `错误: API处理函数执行出错: ${error.message}`;
+        }
+      } else {
+        logError('❌ 无法找到API处理函数');
+        return '错误: 无法找到API处理函数';
+      }
+    }
+    
+    // 使用消息传递检查扩展是否可用（适用于web模式或其他模式的回退方法）
+    try {
+      log('使用消息传递检查扩展连接');
+      
+      // 准备请求 - 使用ping格式
+      const pingRequest = { 
+        type: 'ping', 
+        accessToken: CONFIG.ACCESS_TOKEN,
+        clientId: CONFIG.CLIENT_ID
+      };
+
+      log('发送ping请求:', pingRequest);
+      
+      // 发送请求
+      const response = await chromeAPI.runtime.sendMessage(
+        CONFIG.RUN_MODE === 'extension' ? undefined : CONFIG.EXTENSION_ID,
+        pingRequest
+      );
+      
+      if (response && (response.success === true || response.pong === true)) {
+        log('扩展连接成功:', response);
+        STATE.extensionConnected = true;
+        return null;
+      } else {
+        logError('扩展响应无效:', response);
+        return '错误: 扩展响应无效，可能是访问令牌不正确或API未实现';
+      }
+    } catch (error) {
+      logError('扩展连接失败:', error);
+      return `错误: 无法连接到扩展。${error.message || '未知错误'}`;
+    }
   } catch (error) {
-    console.error('检查扩展时出错:', error);
-    return `错误: ${error.message}`;
+    logError('检查扩展时出错:', error);
+    return `错误: ${error.message || '未知错误'}`;
   }
 };
 
-/**
- * 发送API请求
- * @param {Object} request - API请求对象
- * @returns {Promise<Object>} - API响应对象
- */
-async function sendApiRequest(request) {
-  return new Promise((resolve, reject) => {
-    // 添加访问令牌和客户端ID
-    const fullRequest = {
-      ...request,
-      accessToken: ACCESS_TOKEN,
-      clientId: CLIENT_ID
-    };
-    
-    console.log('发送请求:', JSON.stringify(fullRequest, null, 2));
-    
-    try {
-      // 发送消息到扩展
-      chrome.runtime.sendMessage(
-        EXTENSION_ID,
-        fullRequest,
-        response => {
-          if (chrome.runtime.lastError) {
-            console.error('API请求错误:', chrome.runtime.lastError);
-            reject(new Error(`API请求失败: ${chrome.runtime.lastError.message}`));
-          } else {
-            console.log('收到响应:', JSON.stringify(response, null, 2));
-            resolve(response || { success: false, error: { message: '扩展返回空响应' } });
-          }
-        }
-      );
-    } catch (error) {
-      console.error('发送消息时出错:', error);
-      reject(new Error(`发送消息时出现异常: ${error.message}`));
-    }
-  });
-}
+/** * 发送API请求 * @param {Object} request - API请求对象 * @returns {Promise<Object>} - API响应对象 */async function sendApiRequest(request) {  // 添加访问令牌和客户端ID  const fullRequest = {    ...request,    accessToken: CONFIG.ACCESS_TOKEN,    clientId: CONFIG.CLIENT_ID  };    log('发送请求:', JSON.stringify(fullRequest, null, 2));    try {    // 检查扩展连接状态    if (!STATE.extensionConnected) {      const extensionCheck = await checkExtension();      if (extensionCheck) {        throw new Error(extensionCheck);      }    }        // 根据运行模式选择不同的发送方式    if (CONFIG.RUN_MODE === 'service-worker') {      // Service Worker环境 - 直接调用API处理函数      if (typeof self.handleDataProviderRequest === 'function') {        log('在Service Worker中直接调用API处理函数');        try {          const sender = { id: chrome.runtime.id };          const response = await self.handleDataProviderRequest(fullRequest, sender);          log('收到响应:', JSON.stringify(response, null, 2));          return response || { success: false, error: { message: '处理函数返回空响应' } };        } catch (error) {          logError('直接调用API处理函数失败:', error);          throw new Error(`API处理函数调用失败: ${error.message}`);        }      } else {        logError('无法找到API处理函数');        throw new Error('API处理函数不可用，无法处理请求');      }    } else if (CONFIG.RUN_MODE === 'extension' && STATE.apiHandlerAvailable) {      // 如果在扩展内部且API处理函数可用，尝试直接调用      try {        const bgPage = await chromeAPI.runtime.getBackgroundPage();        if (bgPage && typeof bgPage.handleDataProviderRequest === 'function') {          const response = await bgPage.handleDataProviderRequest(fullRequest, { id: chrome.runtime.id });          log('收到响应:', JSON.stringify(response, null, 2));          return response || { success: false, error: { message: '扩展返回空响应' } };        }      } catch (error) {        logWarning('直接调用API失败，尝试消息传递:', error);      }    }        // 使用消息传递（适用于Web模式或扩展模式的回退方法）    const response = await chromeAPI.runtime.sendMessage(      CONFIG.RUN_MODE === 'extension' ? undefined : CONFIG.EXTENSION_ID,      fullRequest    );        log('收到响应:', JSON.stringify(response, null, 2));    return response || { success: false, error: { message: '扩展返回空响应' } };  } catch (error) {    logError('发送API请求出错:', error);    throw new Error(`API请求失败: ${error.message}`);  }}
 
 /**
  * 获取单个页面
@@ -119,7 +339,7 @@ async function sendApiRequest(request) {
  * @returns {Promise<Object>} - 页面数据
  */
 async function getPage(pageId) {
-  console.log(`尝试获取页面: ${pageId}`);
+  log(`尝试获取页面: ${pageId}`);
   const request = {
     type: 'get',
     entityType: 'page',
@@ -141,17 +361,15 @@ async function getPage(pageId) {
  * @returns {Promise<Object>} - 页面列表和元数据
  */
 async function getPages(options = {}) {
-  console.log('尝试获取页面列表');
+  log('尝试获取页面列表');
   const request = {
     type: 'list',
     entityType: 'page',
     query: {
-      filter: options.filter || {},
       page: options.page || 1,
       pageSize: options.pageSize || 10,
-      sort: options.sort || { field: 'updatedAt', order: 'desc' },
-      search: options.search || '',
-      fields: options.fields || []
+      filter: options.filter || {},
+      sort: options.sort || { updatedAt: -1 }
     }
   };
   
@@ -162,7 +380,7 @@ async function getPages(options = {}) {
   }
   
   return {
-    pages: response.data,
+    items: response.data,
     meta: response.meta
   };
 }
@@ -173,12 +391,12 @@ async function getPages(options = {}) {
  * @returns {Promise<number>} - 页面数量
  */
 async function getPageCount(filter = {}) {
-  console.log('尝试获取页面计数');
+  log('尝试获取页面计数');
   const request = {
     type: 'count',
     entityType: 'page',
     query: {
-      filter
+      filter: filter
     }
   };
   
@@ -193,10 +411,10 @@ async function getPageCount(filter = {}) {
 
 /**
  * 获取所有标签
- * @returns {Promise<string[]>} - 标签列表
+ * @returns {Promise<Array>} - 标签列表
  */
 async function getAllTags() {
-  console.log('尝试获取所有标签');
+  log('尝试获取所有标签');
   const request = {
     type: 'tags',
     entityType: 'page'
@@ -213,19 +431,18 @@ async function getAllTags() {
 
 /**
  * 同步数据
- * @param {number} lastSyncTime - 上次同步时间
- * @param {boolean} fullSync - 是否全量同步
+ * @param {number} lastSyncTime - 上次同步时间戳
+ * @param {boolean} fullSync - 是否完全同步
  * @returns {Promise<Object>} - 同步结果
  */
 async function syncData(lastSyncTime = 0, fullSync = false) {
-  console.log(`尝试同步数据，lastSyncTime=${lastSyncTime}, fullSync=${fullSync}`);
+  log(`尝试同步数据，上次同步时间: ${lastSyncTime}, 完全同步: ${fullSync}`);
   const request = {
     type: 'sync',
     entityType: 'page',
-    sync: {
-      lastSyncTime,
-      fullSync,
-      maxRecords: 100
+    query: {
+      lastSyncTime: lastSyncTime,
+      fullSync: fullSync
     }
   };
   
@@ -235,26 +452,29 @@ async function syncData(lastSyncTime = 0, fullSync = false) {
     throw new Error(`同步数据失败: ${response.error?.message || '未知错误'}`);
   }
   
+  // 更新上次同步时间
+  STATE.lastSyncTime = response.meta?.serverTime || Date.now();
+  
   return {
-    changes: response.data.changes,
-    syncTime: response.meta.syncTime,
-    hasMore: response.meta.hasMore
+    created: response.data?.created || [],
+    updated: response.data?.updated || [],
+    deleted: response.data?.deleted || [],
+    serverTime: response.meta?.serverTime
   };
 }
 
 /**
  * 获取变更记录
- * @param {number} lastSyncTime - 上次同步时间
+ * @param {number} lastSyncTime - 起始时间戳
  * @returns {Promise<Object>} - 变更记录
  */
 async function getChanges(lastSyncTime = 0) {
-  console.log(`尝试获取变更记录，lastSyncTime=${lastSyncTime}`);
+  log(`尝试获取变更记录，起始时间: ${lastSyncTime}`);
   const request = {
     type: 'changes',
     entityType: 'page',
-    sync: {
-      lastSyncTime,
-      maxRecords: 50
+    query: {
+      since: lastSyncTime
     }
   };
   
@@ -265,136 +485,220 @@ async function getChanges(lastSyncTime = 0) {
   }
   
   return {
-    changes: response.data.changes,
-    syncTime: response.meta.syncTime,
-    hasMore: response.meta.hasMore
+    changes: response.data,
+    serverTime: response.meta?.serverTime
   };
 }
 
-// 测试函数 - 分步骤执行
+/**
+ * 测试API
+ * 运行一系列测试以验证API功能
+ */
 async function testApi() {
+  const results = [];
+  let success = true;
+  
   try {
-    // 首先检查环境
+    log('🧪 开始API测试');
+    
+    // 检查环境
     const envError = checkEnvironment();
     if (envError) {
-      console.error(envError);
-      return { error: envError };
+      throw new Error(envError);
     }
     
-    // 检查扩展是否可用
+    // 检查扩展连接
     const extError = await checkExtension();
     if (extError) {
-      console.error(extError);
-      return { error: extError };
+      throw new Error(extError);
     }
     
-    const results = {
-      pageCount: null,
-      pagesList: null,
-      singlePage: null,
-      tags: null,
-      syncResult: null,
-      changesResult: null
-    };
+    results.push({ name: '环境检查', status: 'success', message: '环境和扩展连接检查通过' });
     
-    console.log('===== 开始测试数据提供者API =====');
-    
-    // 1. 测试获取页面计数
+    // 测试1: 获取页面计数
     try {
-      console.log('\n----- 测试获取页面计数 -----');
       const count = await getPageCount();
-      console.log(`✅ 成功: 总页面数: ${count}`);
-      results.pageCount = count;
+      results.push({ 
+        name: '获取页面计数', 
+        status: 'success', 
+        message: `共有 ${count} 个页面` 
+      });
     } catch (error) {
-      console.error(`❌ 失败: 获取页面计数失败: ${error.message}`);
+      success = false;
+      results.push({ 
+        name: '获取页面计数', 
+        status: 'error', 
+        message: error.message 
+      });
     }
     
-    // 2. 测试获取页面列表
+    // 测试2: 获取页面列表
     try {
-      console.log('\n----- 测试获取页面列表 -----');
-      const { pages, meta } = await getPages({ pageSize: 5 });
-      console.log(`✅ 成功: 获取到${pages.length}个页面，总页数: ${meta.pageCount || '未知'}`);
-      if (pages.length > 0) {
-        console.log(`第一个页面: ${pages[0].title || '无标题'}`);
+      const { items, meta } = await getPages();
+      results.push({ 
+        name: '获取页面列表', 
+        status: 'success', 
+        message: `成功获取 ${items.length} 个页面, 共 ${meta?.total || '未知'} 个` 
+      });
+      
+      // 如果有页面，尝试测试获取单个页面
+      if (items.length > 0) {
+        const pageId = items[0].id;
+        
+        // 测试3: 获取单个页面
+        try {
+          const page = await getPage(pageId);
+          results.push({ 
+            name: '获取单个页面', 
+            status: 'success', 
+            message: `成功获取页面: ${page.title || page.id}` 
+          });
+        } catch (error) {
+          success = false;
+          results.push({ 
+            name: '获取单个页面', 
+            status: 'error', 
+            message: error.message 
+          });
+        }
+      } else {
+        results.push({ 
+          name: '获取单个页面', 
+          status: 'skipped', 
+          message: '没有可用的页面ID，跳过测试' 
+        });
       }
-      results.pagesList = { pages, meta };
     } catch (error) {
-      console.error(`❌ 失败: 获取页面列表失败: ${error.message}`);
+      success = false;
+      results.push({ 
+        name: '获取页面列表', 
+        status: 'error', 
+        message: error.message 
+      });
     }
     
-    // 3. 测试获取单个页面
-    if (results.pagesList && results.pagesList.pages && results.pagesList.pages.length > 0) {
-      try {
-        console.log('\n----- 测试获取单个页面 -----');
-        const pageId = results.pagesList.pages[0].id;
-        const page = await getPage(pageId);
-        console.log(`✅ 成功: 页面标题: ${page.title || '无标题'}, URL: ${page.url || '无URL'}`);
-        results.singlePage = page;
-      } catch (error) {
-        console.error(`❌ 失败: 获取单个页面失败: ${error.message}`);
-      }
-    } else {
-      console.log('\n⚠️ 跳过测试获取单个页面: 没有可用的页面ID');
-    }
-    
-    // 4. 测试获取所有标签
+    // 测试4: 获取所有标签
     try {
-      console.log('\n----- 测试获取所有标签 -----');
       const tags = await getAllTags();
-      console.log(`✅ 成功: 标签列表: ${tags ? tags.join(', ') : '无标签'}`);
-      results.tags = tags;
+      results.push({ 
+        name: '获取所有标签', 
+        status: 'success', 
+        message: `成功获取 ${tags.length} 个标签` 
+      });
     } catch (error) {
-      console.error(`❌ 失败: 获取所有标签失败: ${error.message}`);
+      success = false;
+      results.push({ 
+        name: '获取所有标签', 
+        status: 'error', 
+        message: error.message 
+      });
     }
     
-    // 5. 测试同步数据
+    // 测试5: 同步数据
     try {
-      console.log('\n----- 测试同步数据 -----');
-      // 使用0作为lastSyncTime进行完整同步测试
       const syncResult = await syncData(0, true);
-      console.log(`✅ 成功: 同步完成，获取到${syncResult.changes ? syncResult.changes.length : 0}个变更`);
-      results.syncResult = syncResult;
+      results.push({ 
+        name: '同步数据', 
+        status: 'success', 
+        message: `同步成功，新增: ${syncResult.created.length}, 更新: ${syncResult.updated.length}, 删除: ${syncResult.deleted.length}` 
+      });
     } catch (error) {
-      console.error(`❌ 失败: 同步数据失败: ${error.message}`);
+      success = false;
+      results.push({ 
+        name: '同步数据', 
+        status: 'error', 
+        message: error.message 
+      });
     }
     
-    // 6. 测试获取变更记录
+    // 测试6: 获取变更记录
     try {
-      console.log('\n----- 测试获取变更记录 -----');
-      const changes = await getChanges(0);
-      console.log(`✅ 成功: 获取到${changes.changes ? changes.changes.length : 0}个变更记录`);
-      results.changesResult = changes;
+      const { changes } = await getChanges(Date.now() - 30 * 24 * 60 * 60 * 1000); // 过去30天
+      results.push({ 
+        name: '获取变更记录', 
+        status: 'success', 
+        message: `成功获取 ${changes.length} 条变更记录` 
+      });
     } catch (error) {
-      console.error(`❌ 失败: 获取变更记录失败: ${error.message}`);
+      success = false;
+      results.push({ 
+        name: '获取变更记录', 
+        status: 'error', 
+        message: error.message 
+      });
     }
-    
-    console.log('\n===== 测试完成 =====');
-    return results;
     
   } catch (error) {
-    console.error('\n❌ 测试执行失败:', error);
-    return { error: error.message };
+    success = false;
+    results.push({ 
+      name: '测试初始化', 
+      status: 'error', 
+      message: error.message 
+    });
   }
+  
+  // 返回测试结果
+  return {
+    success,
+    results,
+    timestamp: Date.now()
+  };
 }
 
-// 运行测试，需要在浏览器环境中执行
-// testApi()
-//   .then(results => {
-//     console.log('测试结果:', results);
-//   })
-//   .catch(error => {
-//     console.error('测试失败:', error);
-//   });
+// 设置配置项
+function setAccessToken(token) {
+  log(`更新访问令牌: ${CONFIG.ACCESS_TOKEN} -> ${token}`);
+  CONFIG.ACCESS_TOKEN = token;
+  // 重置连接状态，使其在下次API调用时重新检查
+  STATE.extensionConnected = false;
+}
 
-// 导出函数以便在浏览器控制台中使用
-window.testApi = testApi;
-window.getPages = getPages;
-window.getPage = getPage;
-window.getPageCount = getPageCount;
-window.getAllTags = getAllTags;
-window.syncData = syncData;
-window.getChanges = getChanges;
-window.checkEnvironment = checkEnvironment;
-window.checkExtension = checkExtension;
+function setExtensionId(id) {
+  log(`更新扩展ID: ${CONFIG.EXTENSION_ID} -> ${id}`);
+  CONFIG.EXTENSION_ID = id;
+  // 重置连接状态，使其在下次API调用时重新检查
+  STATE.extensionConnected = false;
+}
 
-console.log('数据提供者API测试脚本已加载，请在控制台中运行 window.testApi() 开始测试'); 
+// 检查是否在web环境，为window对象添加必要的函数
+if (typeof window !== 'undefined') {
+  // 在window对象上暴露API函数和配置
+  window.CONFIG = CONFIG;
+  window.STATE = STATE;
+  window.detectEnvironment = detectEnvironment;
+  window.checkEnvironment = checkEnvironment;
+  window.checkExtension = checkExtension;
+  window.getPage = getPage;
+  window.getPages = getPages;
+  window.getPageCount = getPageCount;
+  window.getAllTags = getAllTags;
+  window.syncData = syncData;
+  window.getChanges = getChanges;
+  window.testApi = testApi;
+  window.setAccessToken = setAccessToken;
+  window.setExtensionId = setExtensionId;
+  
+  // 自动检测环境
+  detectEnvironment();
+  log('API测试脚本已加载。使用 testApi() 开始测试。');
+}
+
+// 如果在Node.js环境，导出API
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    CONFIG,
+    STATE,
+    detectEnvironment,
+    checkEnvironment,
+    checkExtension,
+    getPage,
+    getPages,
+    getPageCount,
+    getAllTags,
+    syncData,
+    getChanges,
+    testApi,
+    setAccessToken,
+    setExtensionId
+  };
+} 
