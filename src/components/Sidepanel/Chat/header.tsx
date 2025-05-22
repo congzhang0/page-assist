@@ -10,7 +10,9 @@ import {
   // EraserIcon,
   HistoryIcon,
   PlusSquare,
-  XIcon
+  XIcon,
+  Loader2,
+  RotateCcw
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { CurrentChatModelSettings } from "@/components/Common/Settings/CurrentChatModelSettings"
@@ -18,11 +20,33 @@ import React from "react"
 import { useStorage } from "@plasmohq/storage/hook"
 import { PromptSelect } from "@/components/Common/PromptSelect"
 import { Sidebar } from "@/components/Option/Sidebar"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { isOllamaRunning } from "~/services/ollama"
 export const SidepanelHeader = () => {
   const [hideCurrentChatModelSettings] = useStorage(
     "hideCurrentChatModelSettings",
     false
   )
+  const [checkOllamaStatus] = useStorage("checkOllamaStatus", true)
+  const queryClient = useQueryClient()
+
+  // 查询Ollama状态
+  const {
+    data: ollamaInfo,
+    status: ollamaStatus,
+    refetch,
+    isRefetching
+  } = useQuery({
+    queryKey: ["ollamaStatusHeader", checkOllamaStatus],
+    queryFn: async () => {
+      const isOk = await isOllamaRunning()
+      return {
+        isOk: checkOllamaStatus ? isOk : true
+      }
+    },
+    enabled: checkOllamaStatus,
+    refetchInterval: 30000 // 每30秒刷新一次
+  })
 
   const {
     clearChat,
@@ -39,7 +63,7 @@ export const SidepanelHeader = () => {
     historyId,
     history
   } = useMessage()
-  const { t } = useTranslation(["sidepanel", "common", "option"])
+  const { t } = useTranslation(["sidepanel", "common", "option", "playground"])
   const [openModelSettings, setOpenModelSettings] = React.useState(false)
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
@@ -49,9 +73,37 @@ export const SidepanelHeader = () => {
         <img
           className="h-6 w-auto"
           src={logoImage}
-          alt={t("common:pageAssist")}
+          alt={t("common:Page Mind")}
         />
-        <span className="ml-1 text-sm ">{t("common:pageAssist")}</span>
+        <span className="ml-1 text-sm ">{t("common:Page Mind")}</span>
+        
+        {/* Ollama状态显示 */}
+        {checkOllamaStatus && (
+          <div className="ml-2 inline-flex items-center">
+            {(ollamaStatus === "pending" || isRefetching) && (
+              <Tooltip title={t("playground:ollamaState.searching")}>
+                <div className="inline-flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                </div>
+              </Tooltip>
+            )}
+            {!isRefetching && ollamaStatus === "success" && (
+              ollamaInfo?.isOk ? (
+                <Tooltip title={t("playground:ollamaState.running")}>
+                  <div className="inline-flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  </div>
+                </Tooltip>
+              ) : (
+                <Tooltip title={t("playground:ollamaState.notRunning")}>
+                  <div className="inline-flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  </div>
+                </Tooltip>
+              )
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center space-x-3">

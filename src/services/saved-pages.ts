@@ -5,7 +5,7 @@
 
 import { getDataFromCurrentTab, getDataFromSpecificTab } from "@/libs/get-html";
 import { getScreenshotFromCurrentTab, getScreenshotFromSpecificTab } from "@/libs/get-screenshot";
-import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/saved-pages";
+import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/savedPages";
 import { generateSummary } from "@/services/llm-service";
 import { browser } from "wxt/browser";
 

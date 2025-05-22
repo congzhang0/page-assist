@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Assist API内部测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.debug {
+            background-color: #2196F3;
+        }
+        button.debug:hover {
+            background-color: #0b7dda;
+        }
+        pre {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow: auto;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: -1px;
+        }
+        .tab {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            background-color: #f8f9fa;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: white;
+            border-bottom: 1px solid white;
+        }
+        .tab-content {
+            border: 1px solid #ddd;
+            border-radius: 0 4px 4px 4px;
+            padding: 15px;
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Page Assist 数据提供者API内部测试</h1>
+    
+    <div class="note">
+        <p>这个工具设计用于在Page Assist扩展内部测试数据提供者API功能，避免跨域问题。</p>
+    </div>
+
+    <div class="panel">
+        <h2>1. 环境检查</h2>
+        <button id="checkEnvironment" class="debug">检查扩展环境</button>
+        <button id="checkApiHandler" class="debug">检查API处理函数</button>
+        <button id="injectMock" class="debug">注入模拟API处理函数</button>
+        <div id="envResult"></div>
+    </div>
+
+    <div class="panel">
+        <h2>2. API功能测试</h2>
+        <div class="tabs">
+            <div class="tab active" data-tab="basic">基本测试</div>
+            <div class="tab" data-tab="advanced">高级测试</div>
+        </div>
+        
+        <div class="tab-content active" data-tab="basic">
+            <button id="testCount">获取页面计数</button>
+            <button id="testList">获取页面列表</button>
+            <button id="testTags">获取标签列表</button>
+        </div>
+        
+        <div class="tab-content" data-tab="advanced">
+            <p>访问令牌: <input type="text" id="accessToken" value="cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m" style="width: 300px;"></p>
+            <div>
+                <label for="apiType">请求类型:</label>
+                <select id="apiType">
+                    <option value="count">count</option>
+                    <option value="list">list</option>
+                    <option value="get">get</option>
+                    <option value="tags">tags</option>
+                    <option value="sync">sync</option>
+                    <option value="changes">changes</option>
+                </select>
+                <button id="testCustom">发送请求</button>
+            </div>
+            <div>
+                <h3>自定义参数 (JSON格式):</h3>
+                <textarea id="customParams" rows="5" style="width: 100%;" placeholder='{
+    "entityType": "page",
+    "query": { "filter": {} }
+}'></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>3. 测试结果</h2>
+        <pre id="results">// 测试结果将显示在这里</pre>
+    </div>
+
+    <div class="panel">
+        <h2>4. 诊断和修复</h2>
+        <button id="installLogger" class="debug">安装背景页日志器</button>
+        <button id="checkListeners" class="debug">检查消息监听器</button>
+        <button id="checkConnectable" class="debug">检查externally_connectable</button>
+        <button id="testMockApi" class="debug">测试模拟API</button>
+        <pre id="diagnosticResults">// 诊断结果将显示在这里</pre>
+    </div>
+
+    <script>
+        // 访问令牌
+        let ACCESS_TOKEN = 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m';
+        
+        // 客户端ID
+        const CLIENT_ID = 'client_internal_test_' + Math.random().toString(36).substring(2, 15);
+        
+        // 显示结果
+        function displayResult(result, elementId = 'results') {
+            const resultsElement = document.getElementById(elementId);
+            if (typeof result === 'object') {
+                resultsElement.textContent = JSON.stringify(result, null, 2);
+            } else {
+                resultsElement.textContent = result;
+            }
+        }
+        
+        // 创建状态信息
+        function createStatusMessage(type, message) {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = message;
+            return div;
+        }
+        
+        // 检查环境
+        async function checkEnvironment() {
+            const envResultDiv = document.getElementById('envResult');
+            envResultDiv.innerHTML = '';
+            
+            // 检查chrome对象
+            if (typeof chrome === 'undefined') {
+                envResultDiv.appendChild(createStatusMessage('error', '❌ chrome对象不存在'));
+                return false;
+            }
+            envResultDiv.appendChild(createStatusMessage('success', '✅ chrome对象存在'));
+            
+            // 检查chrome.runtime
+            if (!chrome.runtime) {
+                envResultDiv.appendChild(createStatusMessage('error', '❌ chrome.runtime不存在'));
+                return false;
+            }
+            envResultDiv.appendChild(createStatusMessage('success', '✅ chrome.runtime存在'));
+            
+            // 检查chrome.runtime.id
+            if (!chrome.runtime.id) {
+                envResultDiv.appendChild(createStatusMessage('error', '❌ 不在扩展环境中运行'));
+                return false;
+            }
+            envResultDiv.appendChild(createStatusMessage('success', `✅ 正在扩展环境中运行 (ID: ${chrome.runtime.id})`));
+            
+            // 检查消息监听器
+            try {
+                if (chrome.runtime.onMessage.hasListeners()) {
+                    envResultDiv.appendChild(createStatusMessage('success', '✅ 有内部消息监听器'));
+                } else {
+                    envResultDiv.appendChild(createStatusMessage('error', '❌ 没有内部消息监听器'));
+                }
+                
+                if (chrome.runtime.onMessageExternal.hasListeners()) {
+                    envResultDiv.appendChild(createStatusMessage('success', '✅ 有外部消息监听器'));
+                } else {
+                    envResultDiv.appendChild(createStatusMessage('error', '❌ 没有外部消息监听器'));
+                }
+            } catch (e) {
+                envResultDiv.appendChild(createStatusMessage('error', `❌ 检查监听器时出错: ${e.message}`));
+            }
+            
+            return true;
+        }
+        
+        // 检查API处理函数
+        async function checkApiHandler() {
+            try {
+                let backgroundPage = null;
+                
+                // 尝试获取背景页
+                if (chrome.runtime.getBackgroundPage) {
+                    backgroundPage = await new Promise(resolve => {
+                        chrome.runtime.getBackgroundPage(bg => resolve(bg));
+                    });
+                }
+                
+                if (!backgroundPage) {
+                    return "❌ 无法获取背景页，可能是因为在Service Worker中运行";
+                }
+                
+                // 检查背景页中是否有API处理函数
+                const results = [];
+                
+                if (typeof backgroundPage.handleDataProviderRequest === 'function') {
+                    results.push('✅ handleDataProviderRequest函数存在');
+                } else {
+                    results.push('❌ handleDataProviderRequest函数不存在');
+                    
+                    // 查找可能的处理函数
+                    const possibleHandlers = Object.keys(backgroundPage).filter(key => 
+                        typeof backgroundPage[key] === 'function' && 
+                        (key.toLowerCase().includes('api') || 
+                         key.toLowerCase().includes('provider') || 
+                         key.toLowerCase().includes('data') || 
+                         key.toLowerCase().includes('handle') || 
+                         key.toLowerCase().includes('request'))
+                    );
+                    
+                    if (possibleHandlers.length > 0) {
+                        results.push('🔍 可能的API处理函数: ' + possibleHandlers.join(', '));
+                    } else {
+                        results.push('⚠️ 未找到任何可能的API处理函数');
+                    }
+                }
+                
+                return results.join('\n');
+            } catch (e) {
+                return `❌ 检查API处理函数时出错: ${e.message}`;
+            }
+        }
+        
+        // 注入模拟API处理函数
+        async function injectMockApiHandler() {
+            try {
+                let backgroundPage = null;
+                
+                // 尝试获取背景页
+                if (chrome.runtime.getBackgroundPage) {
+                    backgroundPage = await new Promise(resolve => {
+                        chrome.runtime.getBackgroundPage(bg => resolve(bg));
+                    });
+                }
+                
+                if (!backgroundPage) {
+                    return "❌ 无法获取背景页，可能是因为在Service Worker中运行";
+                }
+                
+                // 向背景页注入模拟API处理函数
+                if (typeof backgroundPage.handleDataProviderRequest !== 'function') {
+                    backgroundPage.handleDataProviderRequest = async function(request, sender) {
+                        console.log('📡 模拟的handleDataProviderRequest被调用:', request);
+                        
+                        // 验证令牌
+                        if (!request.accessToken || request.accessToken !== ACCESS_TOKEN) {
+                            return {
+                                success: false,
+                                error: {
+                                    code: 'auth_invalid_token',
+                                    message: '无效的访问令牌'
+                                },
+                                meta: {
+                                    serverTime: Date.now()
+                                }
+                            };
+                        }
+                        
+                        // 根据请求类型返回模拟响应
+                        switch(request.type) {
+                            case 'count':
+                                return {
+                                    success: true,
+                                    data: {
+                                        count: 42 // 模拟数据
+                                    },
+                                    meta: {
+                                        serverTime: Date.now()
+                                    }
+                                };
+                                
+                            case 'list':
+                                return {
+                                    success: true,
+                                    data: [
+                                        {
+                                            id: 'page_1',
+                                            title: '模拟页面 1',
+                                            url: 'https://example.com/page1',
+                                            tags: ['标签1', '标签2'],
+                                            createdAt: Date.now() - 86400000,
+                                            updatedAt: Date.now() - 3600000
+                                        },
+                                        {
+                                            id: 'page_2',
+                                            title: '模拟页面 2',
+                                            url: 'https://example.com/page2',
+                                            tags: ['标签1'],
+                                            createdAt: Date.now() - 172800000,
+                                            updatedAt: Date.now() - 7200000
+                                        }
+                                    ],
+                                    meta: {
+                                        total: 2,
+                                        page: 1,
+                                        pageSize: 10,
+                                        pageCount: 1,
+                                        serverTime: Date.now()
+                                    }
+                                };
+                                
+                            case 'get':
+                                return {
+                                    success: true,
+                                    data: {
+                                        id: request.id || 'page_1',
+                                        title: '模拟页面详情',
+                                        url: 'https://example.com/page-detail',
+                                        content: '这是模拟的页面内容',
+                                        html: '<div>这是模拟的HTML内容</div>',
+                                        tags: ['标签1', '标签2', '标签3'],
+                                        createdAt: Date.now() - 86400000,
+                                        updatedAt: Date.now() - 3600000
+                                    },
+                                    meta: {
+                                        serverTime: Date.now()
+                                    }
+                                };
+                                
+                            case 'tags':
+                                return {
+                                    success: true,
+                                    data: ['标签1', '标签2', '标签3', '重要', '待读'],
+                                    meta: {
+                                        serverTime: Date.now()
+                                    }
+                                };
+                                
+                            case 'sync':
+                            case 'changes':
+                                return {
+                                    success: true,
+                                    data: {
+                                        changes: [
+                                            {
+                                                id: 'page_1',
+                                                changeType: 'update',
+                                                timestamp: Date.now() - 3600000,
+                                                data: {
+                                                    id: 'page_1',
+                                                    title: '更新的模拟页面',
+                                                    tags: ['标签1', '新标签']
+                                                }
+                                            }
+                                        ],
+                                        hasMore: false
+                                    },
+                                    meta: {
+                                        syncTime: Date.now(),
+                                        serverTime: Date.now()
+                                    }
+                                };
+                                
+                            default:
+                                return {
+                                    success: false,
+                                    error: {
+                                        code: 'invalid_request_type',
+                                        message: `不支持的请求类型: ${request.type}`
+                                    },
+                                    meta: {
+                                        serverTime: Date.now()
+                                    }
+                                };
+                        }
+                    };
+                    
+                    // 检查外部消息监听器
+                    if (!chrome.runtime.onMessageExternal.hasListeners()) {
+                        chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
+                            console.log('📩 收到外部消息:', request);
+                            
+                            if (request && request.accessToken) {
+                                backgroundPage.handleDataProviderRequest(request, sender)
+                                    .then(response => sendResponse(response))
+                                    .catch(error => sendResponse({
+                                        success: false,
+                                        error: {
+                                            code: 'internal_error',
+                                            message: error.message
+                                        }
+                                    }));
+                                return true; // 异步发送响应
+                            }
+                        });
+                    }
+                    
+                    return "✅ 模拟API处理函数注入成功";
+                } else {
+                    return "ℹ️ handleDataProviderRequest函数已存在，无需注入";
+                }
+            } catch (e) {
+                return `❌ 注入模拟API处理函数时出错: ${e.message}`;
+            }
+        }
+        
+        // 发送API请求
+        async function sendApiRequest(request) {
+            return new Promise((resolve, reject) => {
+                // 更新访问令牌
+                ACCESS_TOKEN = document.getElementById('accessToken').value;
+                
+                // 构建完整请求
+                const fullRequest = {
+                    ...request,
+                    accessToken: ACCESS_TOKEN,
+                    clientId: CLIENT_ID
+                };
+                
+                console.log('📤 发送请求:', fullRequest);
+                
+                // 发送消息
+                chrome.runtime.sendMessage(fullRequest, response => {
+                    if (chrome.runtime.lastError) {
+                        reject(new Error(`API请求失败: ${chrome.runtime.lastError.message}`));
+                    } else {
+                        console.log('📥 收到响应:', response);
+                        resolve(response);
+                    }
+                });
+            });
+        }
+        
+        // API测试函数
+        async function testCount() {
+            try {
+                const response = await sendApiRequest({
+                    type: 'count',
+                    entityType: 'page',
+                    query: { filter: {} }
+                });
+                displayResult(response);
+            } catch (error) {
+                displayResult(`❌ 测试失败: ${error.message}`);
+            }
+        }
+        
+        async function testList() {
+            try {
+                const response = await sendApiRequest({
+                    type: 'list',
+                    entityType: 'page',
+                    query: {
+                        filter: {},
+                        page: 1,
+                        pageSize: 10
+                    }
+                });
+                displayResult(response);
+            } catch (error) {
+                displayResult(`❌ 测试失败: ${error.message}`);
+            }
+        }
+        
+        async function testTags() {
+            try {
+                const response = await sendApiRequest({
+                    type: 'tags',
+                    entityType: 'page'
+                });
+                displayResult(response);
+            } catch (error) {
+                displayResult(`❌ 测试失败: ${error.message}`);
+            }
+        }
+        
+        async function testCustomRequest() {
+            try {
+                const type = document.getElementById('apiType').value;
+                let customParams = {};
+                
+                // 解析自定义参数
+                const customParamsText = document.getElementById('customParams').value.trim();
+                if (customParamsText) {
+                    try {
+                        customParams = JSON.parse(customParamsText);
+                    } catch (e) {
+                        throw new Error(`自定义参数JSON解析错误: ${e.message}`);
+                    }
+                } else {
+                    // 默认参数
+                    switch (type) {
+                        case 'count':
+                        case 'list':
+                            customParams = {
+                                entityType: 'page',
+                                query: { filter: {} }
+                            };
+                            break;
+                        case 'get':
+                            customParams = {
+                                entityType: 'page',
+                                id: 'page_1'
+                            };
+                            break;
+                        case 'tags':
+                            customParams = {
+                                entityType: 'page'
+                            };
+                            break;
+                        case 'sync':
+                        case 'changes':
+                            customParams = {
+                                entityType: 'page',
+                                sync: {
+                                    lastSyncTime: 0,
+                                    fullSync: true
+                                }
+                            };
+                            break;
+                    }
+                }
+                
+                // 构建完整请求
+                const request = {
+                    type,
+                    ...customParams
+                };
+                
+                const response = await sendApiRequest(request);
+                displayResult(response);
+            } catch (error) {
+                displayResult(`❌ 测试失败: ${error.message}`);
+            }
+        }
+        
+        // 安装背景页日志器
+        async function installBackgroundLogger() {
+            try {
+                let backgroundPage = null;
+                
+                // 尝试获取背景页
+                if (chrome.runtime.getBackgroundPage) {
+                    backgroundPage = await new Promise(resolve => {
+                        chrome.runtime.getBackgroundPage(bg => resolve(bg));
+                    });
+                }
+                
+                if (!backgroundPage) {
+                    return "❌ 无法获取背景页，可能是因为在Service Worker中运行";
+                }
+                
+                // 从当前页面获取background-page-logger.js的内容
+                const response = await fetch('background-page-logger.js');
+                if (!response.ok) {
+                    return `❌ 无法获取background-page-logger.js: ${response.statusText}`;
+                }
+                
+                const loggerCode = await response.text();
+                
+                // 在背景页中执行代码
+                try {
+                    backgroundPage.eval(loggerCode);
+                    return "✅ 背景页日志器安装成功";
+                } catch (e) {
+                    return `❌ 在背景页中执行代码失败: ${e.message}`;
+                }
+            } catch (e) {
+                return `❌ 安装背景页日志器时出错: ${e.message}`;
+            }
+        }
+        
+        // 检查消息监听器
+        async function checkMessageListeners() {
+            try {
+                let backgroundPage = null;
+                
+                // 尝试获取背景页
+                if (chrome.runtime.getBackgroundPage) {
+                    backgroundPage = await new Promise(resolve => {
+                        chrome.runtime.getBackgroundPage(bg => resolve(bg));
+                    });
+                }
+                
+                if (!backgroundPage) {
+                    return "❌ 无法获取背景页，可能是因为在Service Worker中运行";
+                }
+                
+                // 调用背景页的inspectMessageListeners函数
+                if (typeof backgroundPage.inspectMessageListeners === 'function') {
+                    backgroundPage.inspectMessageListeners();
+                    return "✅ 已在背景页控制台中显示监听器信息";
+                } else {
+                    return "❌ 背景页中未找到inspectMessageListeners函数，请先安装背景页日志器";
+                }
+            } catch (e) {
+                return `❌ 检查消息监听器时出错: ${e.message}`;
+            }
+        }
+        
+        // 检查externally_connectable配置
+        async function checkExternallyConnectable() {
+            try {
+                let backgroundPage = null;
+                
+                // 尝试获取背景页
+                if (chrome.runtime.getBackgroundPage) {
+                    backgroundPage = await new Promise(resolve => {
+                        chrome.runtime.getBackgroundPage(bg => resolve(bg));
+                    });
+                }
+                
+                if (!backgroundPage) {
+                    return "❌ 无法获取背景页，可能是因为在Service Worker中运行";
+                }
+                
+                // 调用背景页的checkExternallyConnectable函数
+                if (typeof backgroundPage.checkExternallyConnectable === 'function') {
+                    backgroundPage.checkExternallyConnectable();
+                    return "✅ 已在背景页控制台中显示externally_connectable配置信息";
+                } else {
+                    return "❌ 背景页中未找到checkExternallyConnectable函数，请先安装背景页日志器";
+                }
+            } catch (e) {
+                return `❌ 检查externally_connectable配置时出错: ${e.message}`;
+            }
+        }
+        
+        // 测试模拟API
+        async function testMockApi() {
+            try {
+                let backgroundPage = null;
+                
+                // 尝试获取背景页
+                if (chrome.runtime.getBackgroundPage) {
+                    backgroundPage = await new Promise(resolve => {
+                        chrome.runtime.getBackgroundPage(bg => resolve(bg));
+                    });
+                }
+                
+                if (!backgroundPage) {
+                    return "❌ 无法获取背景页，可能是因为在Service Worker中运行";
+                }
+                
+                // 调用背景页的testDataProviderAPI函数
+                if (typeof backgroundPage.testDataProviderAPI === 'function') {
+                    backgroundPage.testDataProviderAPI();
+                    return "✅ 已在背景页控制台中运行测试";
+                } else if (typeof backgroundPage.quickTest === 'function') {
+                    backgroundPage.quickTest();
+                    return "✅ 已在背景页控制台中运行测试";
+                } else {
+                    return "❌ 背景页中未找到测试函数，请先安装背景页日志器";
+                }
+            } catch (e) {
+                return `❌ 测试模拟API时出错: ${e.message}`;
+            }
+        }
+        
+        // 切换选项卡
+        function setupTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.getAttribute('data-tab');
+                    
+                    // 激活选项卡
+                    document.querySelectorAll('.tab').forEach(t => {
+                        t.classList.remove('active');
+                    });
+                    tab.classList.add('active');
+                    
+                    // 显示对应内容
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    document.querySelector(`.tab-content[data-tab="${tabName}"]`).classList.add('active');
+                });
+            });
+        }
+        
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', () => {
+            // 设置选项卡
+            setupTabs();
+            
+            // 环境检查
+            document.getElementById('checkEnvironment').addEventListener('click', async () => {
+                await checkEnvironment();
+            });
+            
+            document.getElementById('checkApiHandler').addEventListener('click', async () => {
+                const result = await checkApiHandler();
+                displayResult(result, 'envResult');
+            });
+            
+            document.getElementById('injectMock').addEventListener('click', async () => {
+                const result = await injectMockApiHandler();
+                displayResult(result, 'envResult');
+            });
+            
+            // API测试
+            document.getElementById('testCount').addEventListener('click', testCount);
+            document.getElementById('testList').addEventListener('click', testList);
+            document.getElementById('testTags').addEventListener('click', testTags);
+            document.getElementById('testCustom').addEventListener('click', testCustomRequest);
+            
+            // 诊断和修复
+            document.getElementById('installLogger').addEventListener('click', async () => {
+                const result = await installBackgroundLogger();
+                displayResult(result, 'diagnosticResults');
+            });
+            
+            document.getElementById('checkListeners').addEventListener('click', async () => {
+                const result = await checkMessageListeners();
+                displayResult(result, 'diagnosticResults');
+            });
+            
+            document.getElementById('checkConnectable').addEventListener('click', async () => {
+                const result = await checkExternallyConnectable();
+                displayResult(result, 'diagnosticResults');
+            });
+            
+            document.getElementById('testMockApi').addEventListener('click', async () => {
+                const result = await testMockApi();
+                displayResult(result, 'diagnosticResults');
+            });
+            
+            // 自动运行环境检查
+            checkEnvironment();
+        });
+    </script>
+</body>
+</html> 

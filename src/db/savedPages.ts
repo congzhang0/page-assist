@@ -431,6 +431,125 @@ export class SavedPagesDB {
 
     return Array.from(tagSet);
   }
+
+  /**
+   * 获取符合过滤条件的页面数量
+   * @param filter 过滤条件
+   * @returns 返回符合条件的页面数量
+   */
+  async getPageCount(filter?: Record<string, any>): Promise<number> {
+    logger.debug('获取页面计数', { filter });
+    
+    try {
+      // 使用与 getAllPages 相同的过滤逻辑，但只返回计数
+      const params: QueryParams = {};
+      
+      // 如果有标签过滤，转换过滤条件
+      if (filter && filter.tags) {
+        params.tags = Array.isArray(filter.tags) ? filter.tags : [filter.tags];
+      }
+      
+      // 如果有搜索过滤
+      if (filter && filter.searchText) {
+        params.searchText = filter.searchText;
+      }
+      
+      // 获取所有符合条件的页面
+      const pages = await this.getAllPages(params);
+      
+      return pages.length;
+    } catch (error) {
+      logger.error('获取页面计数失败', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取需要同步的页面
+   * @param lastSyncTime 上次同步时间戳
+   * @param maxRecords 最大返回记录数
+   * @param metadataOnly 是否只返回元数据
+   * @returns 返回需要同步的页面列表
+   */
+  async getPagesForSync(
+    lastSyncTime: number, 
+    maxRecords: number, 
+    metadataOnly: boolean = false
+  ): Promise<Partial<SavedPage>[]> {
+    logger.debug('获取需要同步的页面', {
+      lastSyncTime,
+      maxRecords,
+      metadataOnly
+    });
+    
+    try {
+      const db = await openDatabase();
+      
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const index = store.index('updatedAt');
+        
+        // 使用 IDBKeyRange 获取自上次同步以来的更新
+        const range = IDBKeyRange.lowerBound(lastSyncTime, false);
+        const request = index.openCursor(range);
+        
+        const pages: Partial<SavedPage>[] = [];
+        
+        request.onsuccess = (event) => {
+          const cursor = request.result;
+          
+          if (cursor) {
+            const page = cursor.value as SavedPage;
+            
+            if (metadataOnly) {
+              // 只返回元数据
+              pages.push({
+                id: page.id,
+                title: page.title,
+                url: page.url,
+                tags: page.tags,
+                createdAt: page.createdAt,
+                updatedAt: page.updatedAt
+              });
+            } else {
+              // 返回完整页面数据
+              pages.push(page);
+            }
+            
+            // 如果还没达到最大记录数，继续获取下一条
+            if (pages.length < maxRecords) {
+              cursor.continue();
+            } else {
+              logger.debug(`已达到最大记录数 ${maxRecords}，停止获取更多记录`);
+              resolve(pages);
+            }
+          } else {
+            // 没有更多记录
+            logger.debug(`获取到 ${pages.length} 条需要同步的页面`);
+            resolve(pages);
+          }
+        };
+        
+        request.onerror = () => {
+          const error = request.error;
+          logger.error('获取需要同步的页面失败', {
+            errorName: error?.name,
+            errorMessage: error?.message
+          });
+          reject(new Error(`获取需要同步的页面失败: ${error?.message || '未知错误'}`));
+        };
+        
+        transaction.oncomplete = () => {
+          logger.debug('数据库事务完成，关闭数据库连接');
+          db.close();
+        };
+      });
+    } catch (error) {
+      logger.error('获取需要同步的页面过程中发生错误', error);
+      throw error;
+    }
+  }
 }
 
 // 导出单例实例

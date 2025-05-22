@@ -4,6 +4,7 @@ import { clearBadge, streamDownload } from "@/utils/pull-ollama"
 import { Storage } from "@plasmohq/storage"
 import { getInitialConfig } from "@/services/action"
 import { saveCurrentPage } from "@/services/saved-pages"
+import { initDataProviderAPI } from '@/services/data-provider/api-service'
 
 export default defineBackground({
   main() {
@@ -89,6 +90,15 @@ export default defineBackground({
           title: browser.i18n.getMessage("viewSavedPages"),
           contexts: ["page"]
         })
+
+        // 初始化数据提供者API
+        try {
+          console.log("正在初始化数据提供者API服务...");
+          initDataProviderAPI();
+          console.log("数据提供者API服务初始化完成");
+        } catch (apiError) {
+          console.error("初始化数据提供者API服务失败:", apiError);
+        }
 
       } catch (error) {
         console.error("Error in initLogic:", error)

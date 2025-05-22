@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Assist 数据提供者API测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .test-section {
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        #results {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow: auto;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .troubleshooting {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .troubleshooting h3 {
+            margin-top: 0;
+        }
+        .troubleshooting ul {
+            padding-left: 20px;
+        }
+        .steps {
+            counter-reset: step;
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .steps li {
+            position: relative;
+            padding-left: 35px;
+            margin-bottom: 10px;
+        }
+        .steps li:before {
+            content: counter(step);
+            counter-increment: step;
+            position: absolute;
+            left: 0;
+            width: 25px;
+            height: 25px;
+            line-height: 25px;
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            border-radius: 50%;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-ok {
+            background-color: #28a745;
+        }
+        .status-warning {
+            background-color: #ffc107;
+        }
+        .status-error {
+            background-color: #dc3545;
+        }
+        .status-unknown {
+            background-color: #6c757d;
+        }
+        .config-panel {
+            display: grid;
+            grid-template-columns: 100px 1fr auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .input-group {
+            display: flex;
+            align-items: center;
+        }
+        .input-group input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .input-group button {
+            margin-left: 5px;
+            padding: 8px 10px;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 8px 15px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #f5f5f5;
+            border-color: #ddd;
+            border-bottom: 1px solid #f5f5f5;
+            margin-bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Page Assist 数据提供者API测试</h1>
+    
+    <div class="note">
+        <p><strong>注意：</strong>此测试页面必须在已安装Page Assist扩展的浏览器中打开才能正常工作。确保扩展已启用并配置了数据提供者API。</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>环境状态</h2>
+        <div id="environmentStatus">
+            <p><span class="status-indicator status-unknown"></span> <strong>运行模式:</strong> <span id="runMode">检测中...</span></p>
+            <p><span class="status-indicator status-unknown"></span> <strong>Chrome API:</strong> <span id="chromeApiStatus">检测中...</span></p>
+            <p><span class="status-indicator status-unknown"></span> <strong>扩展连接:</strong> <span id="extensionStatus">检测中...</span></p>
+            <p><span class="status-indicator status-unknown"></span> <strong>API处理函数:</strong> <span id="apiHandlerStatus">检测中...</span></p>
+        </div>
+        <button id="refreshStatus">刷新状态</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>配置</h2>
+        <div class="config-panel">
+            <label for="extensionId">扩展ID:</label>
+            <div class="input-group">
+                <input type="text" id="extensionId" placeholder="扩展ID">
+                <button id="updateExtensionId">更新</button>
+            </div>
+            <span id="extensionIdStatus"></span>
+        </div>
+        <div class="config-panel">
+            <label for="accessToken">访问令牌:</label>
+            <div class="input-group">
+                <input type="text" id="accessToken" placeholder="访问令牌">
+                <button id="updateAccessToken">更新</button>
+            </div>
+            <span id="accessTokenStatus"></span>
+        </div>
+        <div class="config-panel">
+            <label for="skipPingCheck">跳过Ping检查:</label>
+            <div class="input-group">
+                <input type="checkbox" id="skipPingCheck" checked>
+                <span>如果Ping测试失败但需要尝试其他API，请启用此选项</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>环境检查</h2>
+        <p>在运行测试前，请先检查环境是否正确配置：</p>
+        <button id="checkEnvironment">检查环境</button>
+        <button id="checkExtension">检查扩展连接</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试选项</h2>
+        <div class="tabs">
+            <div class="tab active" data-tab="basic">基本测试</div>
+            <div class="tab" data-tab="advanced">高级测试</div>
+        </div>
+        
+        <div class="tab-content active" data-tab="basic">
+            <button id="testAll">运行所有测试</button>
+            <button id="testPageCount">获取页面计数</button>
+            <button id="testPagesList">获取页面列表</button>
+            <button id="testGetPage">获取单个页面</button>
+            <button id="testGetTags">获取所有标签</button>
+            <button id="testSync">同步数据</button>
+            <button id="testChanges">获取变更记录</button>
+        </div>
+        
+        <div class="tab-content" data-tab="advanced">
+            <h3>自定义测试参数</h3>
+            <div class="config-panel">
+                <label for="entityType">实体类型:</label>
+                <select id="entityType">
+                    <option value="page">page</option>
+                    <option value="document">document</option>
+                    <option value="model">model</option>
+                    <option value="knowledge">knowledge</option>
+                    <option value="vector">vector</option>
+                    <option value="message">message</option>
+                </select>
+            </div>
+            <div class="config-panel">
+                <label for="requestType">请求类型:</label>
+                <select id="requestType">
+                    <option value="count">count</option>
+                    <option value="list">list</option>
+                    <option value="get">get</option>
+                    <option value="tags">tags</option>
+                    <option value="sync">sync</option>
+                    <option value="changes">changes</option>
+                </select>
+            </div>
+            <div class="config-panel">
+                <label for="customParams">自定义参数:</label>
+                <textarea id="customParams" rows="4" style="width: 100%;" placeholder='{"filter":{},"page":1,"pageSize":10}'></textarea>
+            </div>
+            <button id="runCustomTest">运行自定义测试</button>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>结果</h2>
+        <pre id="results">// 测试结果将显示在这里</pre>
+    </div>
+    
+    <div class="troubleshooting">
+        <h3>故障排除指南</h3>
+        
+        <div class="error">
+            <p><strong>常见错误：</strong> Cannot read properties of undefined (reading 'sendMessage')</p>
+            <p>这意味着脚本无法访问chrome.runtime.sendMessage方法，通常是环境问题导致的。</p>
+        </div>
+        
+        <div class="error">
+            <p><strong>常见错误：</strong> "扩展响应无效" 或 "Failed to connect to extension"</p>
+            <p>这通常是由扩展的manifest.json中的externally_connectable配置问题导致的。</p>
+        </div>
+        
+        <h4>可能的原因和解决方案：</h4>
+        <ol class="steps">
+            <li><strong>使用正确的浏览器</strong><br>确保使用Chrome或基于Chromium的浏览器（如Edge）。</li>
+            <li><strong>不要直接打开本地文件</strong><br>Chrome的安全限制不允许本地HTML文件通过file://协议直接与扩展通信。请通过以下方式之一访问测试页面：
+                <ul>
+                    <li>使用Web服务器（如http-server、Python的SimpleHTTPServer等）</li>
+                    <li>将这些文件上传到已部署的网站</li>
+                    <li>或者直接将测试代码粘贴到Chrome扩展的DevTools控制台中运行</li>
+                </ul>
+            </li>
+            <li><strong>检查扩展是否安装并启用</strong><br>确认Page Assist扩展已正确安装并启用。可以在Chrome的扩展页面（chrome://extensions/）中查看。</li>
+            <li><strong>验证扩展ID</strong><br>确认脚本中使用的扩展ID是否正确。当前使用的ID是：<code id="currentExtensionId">ffiigpcapfgmbpcggdfklpikceehbffd</code></li>
+            <li><strong>检查externally_connectable配置</strong><br>这是<strong>最常见的问题原因</strong>。确保Page Assist扩展的manifest.json中包含以下配置：
+                <pre>
+"externally_connectable": {
+  "matches": ["*://*/*"]
+}
+                </pre>
+                <p>如果缺少此配置，扩展将拒绝来自外部网页的连接请求。</p>
+            </li>
+            <li><strong>尝试启用"跳过Ping检查"选项</strong><br>如果ping测试失败但您想尝试其他API，勾选页面顶部的"跳过Ping检查"选项。</li>
+            <li><strong>使用扩展内部测试</strong><br>如果以上方法都不奏效，请使用以下方式在扩展内部进行测试：
+                <ol>
+                    <li>打开Chrome扩展页面 (chrome://extensions/)</li>
+                    <li>找到Page Assist扩展，点击"详情"</li>
+                    <li>找到"查看扩展选项"并点击</li>
+                    <li>在扩展的选项页面中打开开发者工具 (按F12)</li>
+                    <li>切换到控制台，粘贴并运行测试脚本</li>
+                </ol>
+            </li>
+        </ol>
+    </div>
+    
+    <script src="test-data-provider-api.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 更新环境状态显示
+            function updateEnvironmentStatus() {
+                const runModeElement = document.getElementById('runMode');
+                const chromeApiElement = document.getElementById('chromeApiStatus');
+                const extensionElement = document.getElementById('extensionStatus');
+                const apiHandlerElement = document.getElementById('apiHandlerStatus');
+                
+                // 运行模式
+                if (typeof window.CONFIG !== 'undefined') {
+                    const mode = window.CONFIG.RUN_MODE;
+                    runModeElement.textContent = mode || '未知';
+                    runModeElement.previousElementSibling.className = 
+                        `status-indicator ${mode ? 'status-ok' : 'status-unknown'}`;
+                    
+                    // 设置配置面板初始值
+                    document.getElementById('extensionId').value = window.CONFIG.EXTENSION_ID;
+                    document.getElementById('accessToken').value = window.CONFIG.ACCESS_TOKEN;
+                    document.getElementById('skipPingCheck').checked = window.CONFIG.SKIP_PING_CHECK;
+                }
+                
+                // Chrome API状态
+                const envError = window.checkEnvironment ? window.checkEnvironment() : '无法检查环境';
+                chromeApiElement.textContent = envError ? '不可用' : '可用';
+                chromeApiElement.previousElementSibling.className = 
+                    `status-indicator ${envError ? 'status-error' : 'status-ok'}`;
+                
+                // 初始化其他状态为检测中
+                extensionElement.textContent = '检测中...';
+                extensionElement.previousElementSibling.className = 'status-indicator status-unknown';
+                apiHandlerElement.textContent = '检测中...';
+                apiHandlerElement.previousElementSibling.className = 'status-indicator status-unknown';
+                
+                // 如果Chrome API可用，检查扩展连接
+                if (!envError && window.checkExtension) {
+                    window.checkExtension().then(extError => {
+                        const isWarning = extError && extError.startsWith('警告:');
+                        extensionElement.textContent = extError ? (isWarning ? '连接警告' : '不可用') : '可用';
+                        extensionElement.previousElementSibling.className = 
+                            `status-indicator ${!extError ? 'status-ok' : (isWarning ? 'status-warning' : 'status-error')}`;
+                        
+                        // 检查API处理函数
+                        if (!extError || isWarning) {
+                            // 简单测试API是否真的可用
+                            window.getPageCount().then(() => {
+                                apiHandlerElement.textContent = '可用';
+                                apiHandlerElement.previousElementSibling.className = 'status-indicator status-ok';
+                            }).catch(err => {
+                                apiHandlerElement.textContent = '不可用';
+                                apiHandlerElement.previousElementSibling.className = 'status-indicator status-error';
+                                console.error('API处理函数测试失败:', err);
+                            });
+                        } else {
+                            apiHandlerElement.textContent = '不可用';
+                            apiHandlerElement.previousElementSibling.className = 'status-indicator status-error';
+                        }
+                    }).catch(err => {
+                        extensionElement.textContent = '检查失败';
+                        extensionElement.previousElementSibling.className = 'status-indicator status-error';
+                        console.error('检查扩展连接时出错:', err);
+                    });
+                }
+            }
+            
+            // 显示测试结果的函数
+            function displayResult(result) {
+                const resultsElement = document.getElementById('results');
+                if (typeof result === 'object') {
+                    resultsElement.textContent = JSON.stringify(result, null, 2);
+                } else {
+                    resultsElement.textContent = result;
+                }
+            }
+            
+            // 更新当前扩展ID显示
+            function updateCurrentExtensionIdDisplay() {
+                if (window.CONFIG && window.CONFIG.EXTENSION_ID) {
+                    document.getElementById('currentExtensionId').textContent = window.CONFIG.EXTENSION_ID;
+                }
+            }
+            
+            // 测试处理函数
+            async function runTest(testFn, args = []) {
+                const resultsElement = document.getElementById('results');
+                resultsElement.textContent = '正在运行测试...';
+                
+                try {
+                    const result = await testFn(...args);
+                    displayResult(result);
+                    return result;
+                } catch (error) {
+                    displayResult(`测试失败: ${error.message}`);
+                    console.error('测试失败:', error);
+                }
+            }
+            
+            // 存储页面ID用于单页面测试
+            let lastPageId = null;
+            
+            // 标签系统
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // 移除所有激活状态
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+                    
+                    // 激活当前标签
+                    tab.classList.add('active');
+                    const targetTab = tab.getAttribute('data-tab');
+                    document.querySelector(`.tab-content[data-tab="${targetTab}"]`).classList.add('active');
+                });
+            });
+            
+            // 初始化和事件绑定
+            updateEnvironmentStatus();
+            updateCurrentExtensionIdDisplay();
+            
+            // 刷新状态按钮
+            document.getElementById('refreshStatus').addEventListener('click', updateEnvironmentStatus);
+            
+            // 配置更新按钮
+            document.getElementById('updateExtensionId').addEventListener('click', () => {
+                const newId = document.getElementById('extensionId').value.trim();
+                const status = document.getElementById('extensionIdStatus');
+                if (window.setExtensionId && newId) {
+                    if (window.setExtensionId(newId)) {
+                        status.textContent = '✅ 已更新';
+                        status.style.color = 'green';
+                        updateCurrentExtensionIdDisplay();
+                    } else {
+                        status.textContent = '❌ 无效的ID';
+                        status.style.color = 'red';
+                    }
+                    setTimeout(() => { status.textContent = ''; }, 3000);
+                }
+            });
+            
+            document.getElementById('updateAccessToken').addEventListener('click', () => {
+                const newToken = document.getElementById('accessToken').value.trim();
+                const status = document.getElementById('accessTokenStatus');
+                if (window.setAccessToken && newToken) {
+                    if (window.setAccessToken(newToken)) {
+                        status.textContent = '✅ 已更新';
+                        status.style.color = 'green';
+                    } else {
+                        status.textContent = '❌ 无效的令牌';
+                        status.style.color = 'red';
+                    }
+                    setTimeout(() => { status.textContent = ''; }, 3000);
+                }
+            });
+            
+            // 跳过Ping检查选项
+            document.getElementById('skipPingCheck').addEventListener('change', (e) => {
+                if (window.CONFIG) {
+                    window.CONFIG.SKIP_PING_CHECK = e.target.checked;
+                    console.log('跳过Ping检查设置已更改:', window.CONFIG.SKIP_PING_CHECK);
+                }
+            });
+            
+            // 环境检查
+            document.getElementById('checkEnvironment').addEventListener('click', () => {
+                const envError = window.checkEnvironment ? window.checkEnvironment() : '无法检查环境';
+                if (envError) {
+                    displayResult(`环境检查失败：\n${envError}`);
+                } else {
+                    displayResult('✅ 环境检查通过: Chrome API可用');
+                }
+                updateEnvironmentStatus();
+            });
+            
+            // 检查扩展连接
+            document.getElementById('checkExtension').addEventListener('click', async () => {
+                displayResult('正在检查扩展连接...');
+                if (!window.checkExtension) {
+                    displayResult('❌ 无法执行检查：checkExtension函数不可用');
+                    return;
+                }
+                
+                try {
+                    const extError = await window.checkExtension();
+                    if (extError) {
+                        displayResult(`扩展连接检查失败：\n${extError}`);
+                    } else {
+                        displayResult('✅ 扩展连接检查通过: 可以成功连接到Page Assist扩展');
+                    }
+                    updateEnvironmentStatus();
+                } catch (error) {
+                    displayResult(`❌ 检查过程出错: ${error.message}`);
+                }
+            });
+            
+            // 运行所有测试
+            document.getElementById('testAll').addEventListener('click', () => {
+                if (!window.testApi) {
+                    displayResult('❌ 无法执行测试：testApi函数不可用');
+                    return;
+                }
+                runTest(window.testApi);
+            });
+            
+            // 获取页面计数
+            document.getElementById('testPageCount').addEventListener('click', () => {
+                if (!window.getPageCount) {
+                    displayResult('❌ 无法执行测试：getPageCount函数不可用');
+                    return;
+                }
+                runTest(window.getPageCount);
+            });
+            
+            // 获取页面列表
+            document.getElementById('testPagesList').addEventListener('click', async () => {
+                if (!window.getPages) {
+                    displayResult('❌ 无法执行测试：getPages函数不可用');
+                    return;
+                }
+                
+                const result = await runTest(window.getPages, [{ pageSize: 5 }]);
+                if (result && result.items && result.items.length > 0) {
+                    lastPageId = result.items[0].id;
+                    console.log(`已保存第一个页面ID: ${lastPageId}`);
+                }
+            });
+            
+            // 获取单个页面
+            document.getElementById('testGetPage').addEventListener('click', async () => {
+                if (!window.getPage) {
+                    displayResult('❌ 无法执行测试：getPage函数不可用');
+                    return;
+                }
+                
+                if (!lastPageId) {
+                    displayResult('请先运行"获取页面列表"测试获取页面ID');
+                    return;
+                }
+                runTest(window.getPage, [lastPageId]);
+            });
+            
+            // 获取所有标签
+            document.getElementById('testGetTags').addEventListener('click', () => {
+                if (!window.getAllTags) {
+                    displayResult('❌ 无法执行测试：getAllTags函数不可用');
+                    return;
+                }
+                runTest(window.getAllTags);
+            });
+            
+            // 同步数据
+            document.getElementById('testSync').addEventListener('click', () => {
+                if (!window.syncData) {
+                    displayResult('❌ 无法执行测试：syncData函数不可用');
+                    return;
+                }
+                runTest(window.syncData, [0, true]);
+            });
+            
+            // 获取变更记录
+            document.getElementById('testChanges').addEventListener('click', () => {
+                if (!window.getChanges) {
+                    displayResult('❌ 无法执行测试：getChanges函数不可用');
+                    return;
+                }
+                runTest(window.getChanges, [0]);
+            });
+            
+            // 运行自定义测试
+            document.getElementById('runCustomTest').addEventListener('click', async () => {
+                const entityType = document.getElementById('entityType').value;
+                const requestType = document.getElementById('requestType').value;
+                let params = {};
+                
+                try {
+                    const customParamsText = document.getElementById('customParams').value.trim();
+                    if (customParamsText) {
+                        params = JSON.parse(customParamsText);
+                    }
+                } catch (error) {
+                    displayResult(`❌ 自定义参数JSON解析错误: ${error.message}`);
+                    return;
+                }
+                
+                if (!window.sendApiRequest) {
+                    displayResult('❌ 无法执行测试：sendApiRequest函数不可用');
+                    return;
+                }
+                
+                // 构建请求
+                const request = {
+                    type: requestType,
+                    entityType: entityType,
+                    ...params
+                };
+                
+                // 特殊处理某些请求类型
+                if (requestType === 'list' || requestType === 'count') {
+                    request.query = params;
+                } else if (requestType === 'sync' || requestType === 'changes') {
+                    request.sync = params;
+                }
+                
+                displayResult('正在运行自定义测试...');
+                
+                try {
+                    const response = await window.sendApiRequest(request);
+                    displayResult(response);
+                } catch (error) {
+                    displayResult(`❌ 自定义测试失败: ${error.message}`);
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
