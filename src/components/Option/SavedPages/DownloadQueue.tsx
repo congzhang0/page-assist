@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input } from 'antd';
+import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input, Modal, Timeline } from 'antd';
 import {
   ClockCircleOutlined,
   LoadingOutlined,
@@ -16,7 +16,7 @@ import {
   CalendarOutlined
 } from '@ant-design/icons';
 import { getAllSaveTasks, clearAutoSaveTask, SaveTaskStatus, manualCheckAllTabs, TaskSource } from '@/services/auto-save';
-import type { SaveTask } from '@/services/auto-save';
+import type { SaveTask, SaveTaskStep } from '@/services/auto-save';
 import { useTranslation } from "react-i18next";
 import dayjs from 'dayjs';
 import SaveSourceTag from './SaveSourceTag';
@@ -29,6 +29,7 @@ const { RangePicker } = DatePicker;
 interface EnhancedSaveTask extends SaveTask {
   progressStep?: string;       // 当前进行的步骤（对于保存中的任务）
   progressPercent?: number;    // 当前步骤的进度百分比
+  steps?: SaveTaskStep[];      // 任务步骤记录
 }
 
 /**
@@ -53,6 +54,10 @@ const DownloadQueue: React.FC = () => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [sourceFilter, setSourceFilter] = useState<TaskSource | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<SaveTaskStatus | 'all'>('all');
+
+  // 步骤详情模态框状态
+  const [stepsModalVisible, setStepsModalVisible] = useState(false);
+  const [currentTaskWithSteps, setCurrentTaskWithSteps] = useState<EnhancedSaveTask | null>(null);
 
   // 加载任务列表
   useEffect(() => {
@@ -306,6 +311,16 @@ const DownloadQueue: React.FC = () => {
       key: 'details',
       render: (_: any, record: EnhancedSaveTask) => (
         <Space>
+          {record.steps && record.steps.length > 0 && (
+            <Tooltip title="查看步骤详情">
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<InfoCircleOutlined />} 
+                onClick={() => showStepsModal(record)}
+              />
+            </Tooltip>
+          )}
           {record.error && (
             <Tooltip title={record.error}>
               <Button type="text" danger size="small" icon={<InfoCircleOutlined />} />
@@ -324,263 +339,320 @@ const DownloadQueue: React.FC = () => {
     },
   ];
 
+  // 显示步骤详情模态框
+  const showStepsModal = (task: EnhancedSaveTask) => {
+    setCurrentTaskWithSteps(task);
+    setStepsModalVisible(true);
+  };
+
   return (
-    <Card
-      title={<Title level={4}>下载队列</Title>}
-      className="mb-4"
-      extra={
-        <Button
-          type="primary"
-          icon={<ReloadOutlined />}
-          onClick={handleCheckAllTabs}
-          loading={checkingTabs}
-        >
-          检查所有标签页
-        </Button>
-      }
-    >
-      {/* 统计信息 */}
-      <div className="mb-4">
-        <Space size="large" wrap>
-          <Statistic title="等待中" value={waitingTasks.length} />
-          <Statistic title="保存中" value={savingTasks.length} />
-          <Statistic title="已完成" value={completedTasks.length} />
-          <Statistic title="失败" value={failedTasks.length} />
-          <Statistic title="被过滤" value={filteredTasks.length} />
-        </Space>
-      </div>
-
-      {/* 检查结果 */}
-      {checkStats && (
+    <>
+      <Card
+        title={<Title level={4}>下载队列</Title>}
+        className="mb-4"
+        extra={
+          <Button
+            type="primary"
+            icon={<ReloadOutlined />}
+            onClick={handleCheckAllTabs}
+            loading={checkingTabs}
+          >
+            检查所有标签页
+          </Button>
+        }
+      >
+        {/* 统计信息 */}
         <div className="mb-4">
-          <Collapse>
-            <Collapse.Panel
-              header={`最近检查结果: 检查了 ${checkStats.checked} 个标签页，设置了 ${checkStats.setup} 个任务，过滤了 ${checkStats.filtered} 个URL`}
-              key="checkStats"
-            >
-              <Space direction="vertical">
-                <Text>检查了 {checkStats.checked} 个标签页</Text>
-                <Text>设置了 {checkStats.setup} 个自动保存任务</Text>
-                <Text>过滤了 {checkStats.filtered} 个不符合规则的URL</Text>
-              </Space>
-            </Collapse.Panel>
-          </Collapse>
+          <Space size="large" wrap>
+            <Statistic title="等待中" value={waitingTasks.length} />
+            <Statistic title="保存中" value={savingTasks.length} />
+            <Statistic title="已完成" value={completedTasks.length} />
+            <Statistic title="失败" value={failedTasks.length} />
+            <Statistic title="被过滤" value={filteredTasks.length} />
+          </Space>
         </div>
-      )}
 
-      {/* 主要内容标签页 */}
-      <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        {/* 活跃任务标签页 */}
-        <TabPane 
-          tab={
-            <span>
-              <Badge count={activeTasks.length} overflowCount={99} size="small">
-                <Text>活跃任务</Text>
-              </Badge>
-            </span>
-          } 
-          key="active"
-        >
-          {activeTasks.length === 0 ? (
-            <Empty description="当前没有活跃的下载任务" />
-          ) : (
-            <>
-              {/* 等待中的任务 */}
-              {waitingTasks.length > 0 && (
-                <div className="mb-4">
-                  <Title level={5}>等待中的任务 ({waitingTasks.length})</Title>
-                  <List
-                    size="small"
-                    bordered
-                    dataSource={waitingTasks}
-                    renderItem={task => (
-                      <List.Item
-                        actions={[
-                          <Tooltip key="cancel" title="取消">
-                            <Button
-                              type="text"
-                              danger
-                              size="small"
-                              icon={<DeleteOutlined />}
-                              onClick={() => handleCancelTask(task.tabId)}
-                            />
-                          </Tooltip>,
-                          <Tooltip key="open" title="在新标签页打开">
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<LinkOutlined />}
-                              onClick={() => window.open(task.url, '_blank')}
-                            />
-                          </Tooltip>
-                        ]}
-                      >
-                        <List.Item.Meta
-                          title={
-                            <Space>
-                              <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
-                              {getStatusTag(task)}
-                              {getSourceTag(task)}
-                            </Space>
-                          }
-                          description={
-                            <div>
-                              <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
-                              <div className="mt-1">
-                                <Progress
-                                  percent={calculateProgress(task)}
-                                  size="small"
-                                  status="active"
-                                  format={() => formatRemainingTime(task)}
-                                />
-                              </div>
-                            </div>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              )}
+        {/* 检查结果 */}
+        {checkStats && (
+          <div className="mb-4">
+            <Collapse>
+              <Collapse.Panel
+                header={`最近检查结果: 检查了 ${checkStats.checked} 个标签页，设置了 ${checkStats.setup} 个任务，过滤了 ${checkStats.filtered} 个URL`}
+                key="checkStats"
+              >
+                <Space direction="vertical">
+                  <Text>检查了 {checkStats.checked} 个标签页</Text>
+                  <Text>设置了 {checkStats.setup} 个自动保存任务</Text>
+                  <Text>过滤了 {checkStats.filtered} 个不符合规则的URL</Text>
+                </Space>
+              </Collapse.Panel>
+            </Collapse>
+          </div>
+        )}
 
-              {/* 保存中的任务 */}
-              {savingTasks.length > 0 && (
-                <div className="mb-4">
-                  <Title level={5}>保存中的任务 ({savingTasks.length})</Title>
-                  <List
-                    size="small"
-                    bordered
-                    dataSource={savingTasks}
-                    renderItem={task => (
-                      <List.Item>
-                        <List.Item.Meta
-                          title={
-                            <Space>
-                              <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
-                              {getStatusTag(task)}
-                              {getSourceTag(task)}
-                            </Space>
-                          }
-                          description={
-                            <div>
-                              <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
-                              {task.progressStep && (
+        {/* 主要内容标签页 */}
+        <Tabs activeKey={activeTab} onChange={setActiveTab}>
+          {/* 活跃任务标签页 */}
+          <TabPane 
+            tab={
+              <span>
+                <Badge count={activeTasks.length} overflowCount={99} size="small">
+                  <Text>活跃任务</Text>
+                </Badge>
+              </span>
+            } 
+            key="active"
+          >
+            {activeTasks.length === 0 ? (
+              <Empty description="当前没有活跃的下载任务" />
+            ) : (
+              <>
+                {/* 等待中的任务 */}
+                {waitingTasks.length > 0 && (
+                  <div className="mb-4">
+                    <Title level={5}>等待中的任务 ({waitingTasks.length})</Title>
+                    <List
+                      size="small"
+                      bordered
+                      dataSource={waitingTasks}
+                      renderItem={task => (
+                        <List.Item
+                          actions={[
+                            <Tooltip key="cancel" title="取消">
+                              <Button
+                                type="text"
+                                danger
+                                size="small"
+                                icon={<DeleteOutlined />}
+                                onClick={() => handleCancelTask(task.tabId)}
+                              />
+                            </Tooltip>,
+                            <Tooltip key="open" title="在新标签页打开">
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<LinkOutlined />}
+                                onClick={() => window.open(task.url, '_blank')}
+                              />
+                            </Tooltip>
+                          ]}
+                        >
+                          <List.Item.Meta
+                            title={
+                              <Space>
+                                <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
+                                {getStatusTag(task)}
+                                {getSourceTag(task)}
+                              </Space>
+                            }
+                            description={
+                              <div>
+                                <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
                                 <div className="mt-1">
-                                  <Progress 
-                                    percent={task.progressPercent || 0} 
-                                    size="small" 
+                                  <Progress
+                                    percent={calculateProgress(task)}
+                                    size="small"
                                     status="active"
-                                    format={() => task.progressStep}
+                                    format={() => formatRemainingTime(task)}
                                   />
                                 </div>
-                              )}
-                            </div>
-                          }
-                        />
-                      </List.Item>
-                    )}
+                              </div>
+                            }
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  </div>
+                )}
+
+                {/* 保存中的任务 */}
+                {savingTasks.length > 0 && (
+                  <div className="mb-4">
+                    <Title level={5}>保存中的任务 ({savingTasks.length})</Title>
+                    <List
+                      size="small"
+                      bordered
+                      dataSource={savingTasks}
+                      renderItem={task => (
+                        <List.Item>
+                          <List.Item.Meta
+                            title={
+                              <Space>
+                                <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
+                                {getStatusTag(task)}
+                                {getSourceTag(task)}
+                              </Space>
+                            }
+                            description={
+                              <div>
+                                <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
+                                {task.progressStep && (
+                                  <div className="mt-1">
+                                    <Progress 
+                                      percent={task.progressPercent || 0} 
+                                      size="small" 
+                                      status="active"
+                                      format={() => task.progressStep}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            }
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </TabPane>
+
+          {/* 历史记录标签页 */}
+          <TabPane 
+            tab={
+              <span>
+                <Badge count={completedTasks.length + failedTasks.length + filteredTasks.length} overflowCount={99} size="small">
+                  <Text>历史记录</Text>
+                </Badge>
+              </span>
+            } 
+            key="history"
+          >
+            {/* 筛选器 */}
+            <div className="mb-4 p-4 border border-gray-200 rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="mb-1 text-sm font-medium">搜索</div>
+                  <Input
+                    placeholder="搜索标题或URL"
+                    value={searchText}
+                    onChange={e => setSearchText(e.target.value)}
+                    prefix={<SearchOutlined />}
+                    allowClear
                   />
                 </div>
-              )}
-            </>
-          )}
-        </TabPane>
-
-        {/* 历史记录标签页 */}
-        <TabPane 
-          tab={
-            <span>
-              <Badge count={completedTasks.length + failedTasks.length + filteredTasks.length} overflowCount={99} size="small">
-                <Text>历史记录</Text>
-              </Badge>
-            </span>
-          } 
-          key="history"
-        >
-          {/* 筛选器 */}
-          <div className="mb-4 p-4 border border-gray-200 rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
-            <div className="flex flex-wrap gap-4 items-end">
-              <div className="flex-1 min-w-[200px]">
-                <div className="mb-1 text-sm font-medium">搜索</div>
-                <Input
-                  placeholder="搜索标题或URL"
-                  value={searchText}
-                  onChange={e => setSearchText(e.target.value)}
-                  prefix={<SearchOutlined />}
-                  allowClear
-                />
-              </div>
-              
-              <div className="flex-1 min-w-[200px]">
-                <div className="mb-1 text-sm font-medium">日期范围</div>
-                <RangePicker 
-                  value={dateRange}
-                  onChange={value => setDateRange(value)}
-                  style={{ width: '100%' }}
-                />
-              </div>
-              
-              <div className="w-[150px]">
-                <div className="mb-1 text-sm font-medium">来源</div>
-                <Select
-                  style={{ width: '100%' }}
-                  value={sourceFilter}
-                  onChange={setSourceFilter}
-                  options={[
-                    { value: 'all', label: '全部来源' },
-                    { value: TaskSource.MANUAL, label: '手动保存' },
-                    { value: TaskSource.AUTO_RULE, label: '规则自动' },
-                    { value: TaskSource.AUTO_TABS, label: '标签页批量' },
-                  ]}
-                />
-              </div>
-              
-              <div className="w-[150px]">
-                <div className="mb-1 text-sm font-medium">状态</div>
-                <Select
-                  style={{ width: '100%' }}
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  options={[
-                    { value: 'all', label: '全部状态' },
-                    { value: SaveTaskStatus.COMPLETED, label: '已完成' },
-                    { value: SaveTaskStatus.FAILED, label: '失败' },
-                  ]}
-                />
-              </div>
-              
-              <div>
-                <Button 
-                  icon={<ClearOutlined />} 
-                  onClick={clearFilters}
-                >
-                  清除筛选
-                </Button>
+                
+                <div className="flex-1 min-w-[200px]">
+                  <div className="mb-1 text-sm font-medium">日期范围</div>
+                  <RangePicker 
+                    value={dateRange}
+                    onChange={value => setDateRange(value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                
+                <div className="w-[150px]">
+                  <div className="mb-1 text-sm font-medium">来源</div>
+                  <Select
+                    style={{ width: '100%' }}
+                    value={sourceFilter}
+                    onChange={setSourceFilter}
+                    options={[
+                      { value: 'all', label: '全部来源' },
+                      { value: TaskSource.MANUAL, label: '手动保存' },
+                      { value: TaskSource.AUTO_RULE, label: '规则自动' },
+                      { value: TaskSource.AUTO_TABS, label: '标签页批量' },
+                    ]}
+                  />
+                </div>
+                
+                <div className="w-[150px]">
+                  <div className="mb-1 text-sm font-medium">状态</div>
+                  <Select
+                    style={{ width: '100%' }}
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={[
+                      { value: 'all', label: '全部状态' },
+                      { value: SaveTaskStatus.COMPLETED, label: '已完成' },
+                      { value: SaveTaskStatus.FAILED, label: '失败' },
+                    ]}
+                  />
+                </div>
+                
+                <div>
+                  <Button 
+                    icon={<ClearOutlined />} 
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* 历史记录子标签页 */}
-          <Tabs activeKey={historyTab} onChange={setHistoryTab} size="small" tabPosition="top">
-            <TabPane tab={`全部记录 (${completedTasks.length + failedTasks.length + filteredTasks.length})`} key="all" />
-            <TabPane tab={`已完成 (${completedTasks.length})`} key="completed" />
-            <TabPane tab={`失败 (${failedTasks.length})`} key="failed" />
-            <TabPane tab={`被过滤 (${filteredTasks.length})`} key="filtered" />
-          </Tabs>
+            {/* 历史记录子标签页 */}
+            <Tabs activeKey={historyTab} onChange={setHistoryTab} size="small" tabPosition="top">
+              <TabPane tab={`全部记录 (${completedTasks.length + failedTasks.length + filteredTasks.length})`} key="all" />
+              <TabPane tab={`已完成 (${completedTasks.length})`} key="completed" />
+              <TabPane tab={`失败 (${failedTasks.length})`} key="failed" />
+              <TabPane tab={`被过滤 (${filteredTasks.length})`} key="filtered" />
+            </Tabs>
 
-          {/* 历史记录表格 */}
-          <div className="mt-4">
-            <Table
-              columns={historyColumns}
-              dataSource={getHistoryTasks()}
-              rowKey={(record) => `${record.tabId}-${record.createdAt}`}
-              pagination={{ pageSize: 10 }}
-              size="small"
-            />
+            {/* 历史记录表格 */}
+            <div className="mt-4">
+              <Table
+                columns={historyColumns}
+                dataSource={getHistoryTasks()}
+                rowKey={(record) => `${record.tabId}-${record.createdAt}`}
+                pagination={{ pageSize: 10 }}
+                size="small"
+              />
+            </div>
+          </TabPane>
+        </Tabs>
+      </Card>
+      
+      {/* 步骤详情模态框 */}
+      <Modal
+        title="任务步骤详情"
+        open={stepsModalVisible}
+        onCancel={() => setStepsModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        {currentTaskWithSteps && (
+          <div>
+            <div className="mb-3">
+              <strong>标题：</strong> {currentTaskWithSteps.title || '无标题'}
+            </div>
+            <div className="mb-3">
+              <strong>URL：</strong> {currentTaskWithSteps.url}
+            </div>
+            <div className="mb-3">
+              <strong>来源：</strong> <SaveSourceTag source={currentTaskWithSteps.source} sourceInfo={currentTaskWithSteps.sourceInfo} showLabel={true} />
+            </div>
+            
+            <div className="mb-2">
+              <strong>步骤详情：</strong>
+            </div>
+            
+            {currentTaskWithSteps.steps && currentTaskWithSteps.steps.length > 0 ? (
+              <Timeline>
+                {currentTaskWithSteps.steps.map((step, index) => (
+                  <Timeline.Item 
+                    key={index}
+                    color={
+                      step.status === 'success' ? 'green' :
+                      step.status === 'failed' ? 'red' :
+                      'blue'
+                    }
+                  >
+                    <div>
+                      <strong>{step.step}</strong> ({new Date(step.timestamp).toLocaleTimeString()})
+                    </div>
+                    <div className="text-sm text-gray-500">{step.message}</div>
+                  </Timeline.Item>
+                ))}
+              </Timeline>
+            ) : (
+              <Empty description="无步骤详情" />
+            )}
           </div>
-        </TabPane>
-      </Tabs>
-    </Card>
+        )}
+      </Modal>
+    </>
   );
 };
 

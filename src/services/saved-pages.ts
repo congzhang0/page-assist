@@ -10,6 +10,7 @@ import type { SavedPage, SavePageParams } from "@/db/savedpages";
 import { generateSummary } from "@/services/llm-service";
 import { browser } from "wxt/browser";
 import { TaskSource } from "./auto-save";
+import { isUrlAlreadySaved } from "./auto-save"; // 导入从auto-save.ts的函数
 
 /**
  * 保存当前页面到数据库
@@ -117,6 +118,30 @@ export const saveCurrentPage = async (params?: {
 
     const { url, title, content, type, pdf, favicon } = pageDataResult;
     logger.info('成功获取页面内容', { url, title, contentLength: content?.length, type });
+
+    // 检查URL是否已经保存过
+    const isExist = await isUrlAlreadySaved(url);
+    if (isExist) {
+      logger.info('URL已经存在，跳过保存:', url);
+      updateSaveStatus("✓", "#2ecc71", "完成", "页面已存在，跳过重复保存！");
+      
+      // 显示成功通知
+      statusIndicator.showNotification(
+        "页面已存在", 
+        "该URL已经保存过，跳过重复保存",
+        statusIndicator.StatusType.INFO
+      );
+      
+      // 获取现有页面并返回
+      const existingPages = await getAllSavedPages({ searchText: url });
+      const existingPage = existingPages.find(page => page.url === url);
+      if (existingPage) {
+        return existingPage;
+      }
+      
+      // 如果没找到精确匹配的页面(极少数情况)，继续保存流程
+      logger.warn('URL已存在但未找到精确匹配的页面，将继续保存流程:', url);
+    }
 
     // 获取页面截图
      logger.debug('正在获取页面截图', params?.tabId ? { tabId: params.tabId } : {});
