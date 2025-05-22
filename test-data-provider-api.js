@@ -593,18 +593,45 @@ async function getPageCount(filter = {}) {
  */
 async function getAllTags() {
   log('尝试获取所有标签');
-  const request = {
-    type: 'tags',
-    entityType: 'page'
-  };
   
-  const response = await sendApiRequest(request);
-  
-  if (!response.success) {
-    throw new Error(`获取标签失败: ${response.error?.message || '未知错误'}`);
+  // 首先尝试使用 'tags' 请求类型
+  try {
+    const request = {
+      type: 'tags',
+      entityType: 'page'
+    };
+    
+    const response = await sendApiRequest(request);
+    
+    if (response.success) {
+      log('使用tags请求类型成功获取标签');
+      return response.data;
+    } else {
+      log('tags请求类型失败，尝试使用备用方法', response.error);
+    }
+  } catch (error) {
+    log('tags请求类型出错，尝试使用备用方法', error);
   }
   
-  return response.data;
+  // 备用方法：从所有页面中提取标签
+  log('使用备用方法：从页面列表中提取标签');
+  try {
+    const { items } = await getPages({ pageSize: 100 });
+    
+    // 从页面中提取所有标签并去重
+    const tagSet = new Set();
+    items.forEach(page => {
+      if (Array.isArray(page.tags)) {
+        page.tags.forEach(tag => tag && tagSet.add(tag));
+      }
+    });
+    
+    const tags = Array.from(tagSet);
+    log(`成功从页面中提取了 ${tags.length} 个唯一标签`);
+    return tags;
+  } catch (error) {
+    throw new Error(`获取标签失败: ${error.message || '未知错误'}`);
+  }
 }
 
 /**

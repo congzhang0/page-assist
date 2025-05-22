@@ -1,173 +1,179 @@
 /**
- * Page Assist 数据提供者API直接测试脚本 - 扩展控制台版本
- * 
- * 使用方法:
- * 1. 打开扩展选项页或背景页（chrome://extensions -> Page Assist -> 详情 -> 背景页）
- * 2. 打开开发者工具 (F12)
- * 3. 复制并粘贴此脚本到控制台中
- * 4. 运行 testPageCount() 或 testPagesList() 等测试函数
+ * Page Assist 数据提供者API测试和工作区函数
+ * 在扩展的控制台中运行此脚本以解决标签API问题
  */
 
-const TOKEN = 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m';
+// 访问令牌 - 实际使用中应与扩展配置中的令牌匹配
+const ACCESS_TOKEN = 'cmSL9iyrPfHAYpQx6qCdvtbBwKvBCL1m';
+const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 15);
 
-// 获取API处理函数
-function getApiHandler() {
-  // 优先检查全局函数
-  if (typeof handleDataProviderRequest === 'function') {
-    return handleDataProviderRequest;
-  }
-  
-  // 检查DataProviderAPI对象
-  if (typeof DataProviderAPI === 'object' && typeof DataProviderAPI.handleDataProviderRequest === 'function') {
-    return DataProviderAPI.handleDataProviderRequest;
-  }
-  
-  // 遍历所有模块找到处理函数
-  for (const key in self) {
-    const obj = self[key];
-    if (typeof obj === 'object' && obj !== null && typeof obj.handleDataProviderRequest === 'function') {
-      console.log(`在模块 ${key} 中找到API处理函数`);
-      return obj.handleDataProviderRequest;
-    }
-  }
-  
-  console.error('无法找到API处理函数');
-  return null;
-}
-
-// 测试页面计数
-async function testPageCount() {
-  console.log('测试页面计数API...');
-  const handler = getApiHandler();
-  
-  if (!handler) {
-    console.error('无法执行测试: API处理函数不可用');
-    return;
-  }
-  
-  const request = {
-    type: 'count',
-    entityType: 'page',
-    query: { filter: {} },
-    accessToken: TOKEN,
-    clientId: 'console_test_' + Date.now()
+/**
+ * 发送API请求
+ * @param {Object} request - API请求对象
+ * @returns {Promise<Object>} - API响应对象
+ */
+async function sendApiRequest(request) {
+  // 添加访问令牌和客户端ID
+  const fullRequest = {
+    ...request,
+    accessToken: ACCESS_TOKEN,
+    clientId: CLIENT_ID
   };
   
-  console.log('发送请求:', request);
+  console.log('发送请求:', JSON.stringify(fullRequest, null, 2));
   
   try {
-    const response = await handler(request, { id: chrome.runtime.id });
-    console.log('响应:', response);
+    // 直接调用API处理函数
+    if (typeof handleDataProviderRequest !== 'function') {
+      throw new Error('API处理函数不可用，请确保在扩展的背景页控制台中运行此脚本');
+    }
+    
+    const response = await handleDataProviderRequest(fullRequest, { id: chrome.runtime.id });
+    console.log('收到响应:', JSON.stringify(response, null, 2));
     return response;
   } catch (error) {
-    console.error('测试失败:', error);
+    console.error('API请求失败:', error);
+    throw error;
   }
 }
 
-// 测试页面列表
-async function testPagesList() {
-  console.log('测试页面列表API...');
-  const handler = getApiHandler();
+/**
+ * 获取单个页面（包含完整信息：URL、内容、摘要和标签）
+ * @param {string} pageId - 页面ID
+ * @returns {Promise<Object>} - 页面完整数据
+ */
+async function getCompletePage(pageId) {
+  console.log(`获取完整页面信息: ${pageId}`);
+  const request = {
+    type: 'get',
+    entityType: 'page',
+    id: pageId
+  };
   
-  if (!handler) {
-    console.error('无法执行测试: API处理函数不可用');
-    return;
+  const response = await sendApiRequest(request);
+  
+  if (!response.success) {
+    throw new Error(`获取页面失败: ${response.error?.message || '未知错误'}`);
   }
+  
+  return response.data;
+}
+
+/**
+ * 获取所有页面（包含它们的标签）
+ * @param {Object} options - 可选参数，如页码、每页大小等
+ * @returns {Promise<Array>} - 页面列表
+ */
+async function getAllPagesWithTags(options = {}) {
+  console.log('获取所有页面（包含标签）');
+  const request = {
+    type: 'list',
+    entityType: 'page',
+    query: {
+      page: options.page || 1,
+      pageSize: options.pageSize || 50,
+      filter: options.filter || {}
+    }
+  };
+  
+  const response = await sendApiRequest(request);
+  
+  if (!response.success) {
+    throw new Error(`获取页面列表失败: ${response.error?.message || '未知错误'}`);
+  }
+  
+  return {
+    items: response.data,
+    meta: response.meta
+  };
+}
+
+/**
+ * 获取所有标签（通过提取所有页面的标签并去重）
+ * @returns {Promise<Array>} - 标签列表
+ */
+async function getAllTagsWorkaround() {
+  console.log('获取所有标签（通过页面提取）');
+  
+  try {
+    // 获取所有页面，以获取尽可能多的标签
+    const { items } = await getAllPagesWithTags({ pageSize: 100 });
+    
+    // 从页面中提取所有标签并去重
+    const tagSet = new Set();
+    items.forEach(page => {
+      if (Array.isArray(page.tags)) {
+        page.tags.forEach(tag => tag && tagSet.add(tag));
+      }
+    });
+    
+    const tags = Array.from(tagSet);
+    console.log(`成功提取 ${tags.length} 个唯一标签`);
+    return tags;
+  } catch (error) {
+    console.error('获取标签失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 按标签筛选页面
+ * @param {string|string[]} tags - 标签或标签数组
+ * @returns {Promise<Array>} - 包含指定标签的页面列表
+ */
+async function filterPagesByTags(tags) {
+  console.log(`按标签筛选页面: ${Array.isArray(tags) ? tags.join(', ') : tags}`);
   
   const request = {
     type: 'list',
     entityType: 'page',
-    query: { 
-      filter: {},
-      page: 1,
-      pageSize: 5
-    },
-    accessToken: TOKEN,
-    clientId: 'console_test_' + Date.now()
-  };
-  
-  console.log('发送请求:', request);
-  
-  try {
-    const response = await handler(request, { id: chrome.runtime.id });
-    console.log('响应:', response);
-    return response;
-  } catch (error) {
-    console.error('测试失败:', error);
-  }
-}
-
-// 测试获取单个页面
-async function testGetPage(pageId) {
-  console.log('测试获取页面API...');
-  const handler = getApiHandler();
-  
-  if (!handler) {
-    console.error('无法执行测试: API处理函数不可用');
-    return;
-  }
-  
-  if (!pageId) {
-    console.log('未提供页面ID，先获取页面列表...');
-    const listResult = await testPagesList();
-    if (listResult && listResult.data && listResult.data.length > 0) {
-      pageId = listResult.data[0].id;
-      console.log(`使用第一个页面ID: ${pageId}`);
-    } else {
-      console.error('无法获取页面ID，请手动提供');
-      return;
+    query: {
+      filter: {
+        tags: tags
+      },
+      pageSize: 100
     }
-  }
-  
-  const request = {
-    type: 'get',
-    entityType: 'page',
-    id: pageId,
-    accessToken: TOKEN,
-    clientId: 'console_test_' + Date.now()
   };
   
-  console.log('发送请求:', request);
+  const response = await sendApiRequest(request);
   
-  try {
-    const response = await handler(request, { id: chrome.runtime.id });
-    console.log('响应:', response);
-    return response;
-  } catch (error) {
-    console.error('测试失败:', error);
+  if (!response.success) {
+    throw new Error(`按标签筛选页面失败: ${response.error?.message || '未知错误'}`);
   }
+  
+  return {
+    items: response.data,
+    meta: response.meta
+  };
 }
 
-// 运行所有测试
-async function runAllTests() {
-  console.log('运行所有测试...');
-  
-  // 测试页面计数
-  const countResult = await testPageCount();
-  if (!countResult || !countResult.success) {
-    console.error('页面计数测试失败，终止测试');
-    return;
-  }
-  
-  // 测试页面列表
-  const listResult = await testPagesList();
-  if (!listResult || !listResult.success) {
-    console.error('页面列表测试失败，终止测试');
-    return;
-  }
-  
-  // 测试获取单个页面
-  if (listResult.data && listResult.data.length > 0) {
-    const pageId = listResult.data[0].id;
-    await testGetPage(pageId);
-  }
-  
-  console.log('所有测试完成!');
-}
+// 导出到全局作用域，使函数可以从控制台直接调用
+window.getCompletePage = getCompletePage;
+window.getAllPagesWithTags = getAllPagesWithTags;
+window.getAllTagsWorkaround = getAllTagsWorkaround;
+window.filterPagesByTags = filterPagesByTags;
+window.sendApiRequest = sendApiRequest;
 
-// 显示使用说明
-console.log('API测试脚本已加载，可用的测试函数:');
-console.log('- testPageCount(): 测试页面计数');
-console.log('- testPagesList(): 测试页面列表');
-console.log('- testGetPage(pageId): 测试获取单个页面');
-console.log('- runAllTests(): 运行所有测试'); 
+// 使用说明
+console.log(`
+===== Page Assist API 标签工作函数 =====
+
+以下函数已添加到全局作用域，可直接从控制台调用：
+
+1. getCompletePage(pageId) - 获取页面的完整信息，包括URL、内容、摘要和标签
+   例如: getCompletePage("page_xxxx-xxxx")
+
+2. getAllPagesWithTags(options) - 获取所有页面及其标签
+   例如: getAllPagesWithTags() 或 getAllPagesWithTags({pageSize: 20})
+
+3. getAllTagsWorkaround() - 获取所有标签（通过提取所有页面的标签并去重）
+   例如: getAllTagsWorkaround()
+
+4. filterPagesByTags(tags) - 按标签筛选页面
+   例如: filterPagesByTags("工作") 或 filterPagesByTags(["工作", "重要"])
+
+5. sendApiRequest(request) - 发送自定义API请求
+   例如: sendApiRequest({type: 'list', entityType: 'page'})
+
+注意：此脚本必须在扩展的背景页控制台中运行。
+`); 
