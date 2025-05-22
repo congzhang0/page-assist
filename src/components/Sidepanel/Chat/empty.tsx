@@ -12,10 +12,10 @@ export const EmptySidePanel = () => {
         <img
           className="h-32 w-auto mb-4"
           src={logoImage}
-          alt={t("common:pageAssist")}
+          alt={t("common:pageFlow", "Page Flow")}
         />
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
-          {t("common:pageAssist")}
+          {t("common:pageFlow", "Page Flow")}
         </h2>
         <p className="text-gray-600 dark:text-gray-300 mb-4">
           {t("common:welcomeMessage", "您的本地AI助手，随时待命为您解答网页相关问题")}
@@ -24,6 +24,8 @@ export const EmptySidePanel = () => {
           <p>✓ {t("common:feature1", "与任何网页进行聊天")}</p>
           <p>✓ {t("common:feature2", "使用本地AI模型保护隐私")}</p>
           <p>✓ {t("common:feature3", "支持多种AI提供商")}</p>
+          <p>✓ {t("common:feature4", "将网页浏览转化为系统化知识")}</p>
+          <p>✓ {t("common:feature5", "自动保存 · 本地存储 · 轻松检索")}</p>
         </div>
         <div className="mt-6 text-gray-500 dark:text-gray-400 text-sm">
           {t("common:startTypingMessage", "开始输入您的问题...")}

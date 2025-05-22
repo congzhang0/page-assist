@@ -1,5 +1,6 @@
 {
-    "pageAssist": "Page Mind",
+    "pageAssist": "Page Flow",
+    "pageFlow": "Page Flow",
     "selectAModel": "Select a Model",
     "save": "Save",
     "saved": "Saved",
@@ -181,5 +182,12 @@
         "thought": "Thought for {{time}}"
     },
     "mermaid": "Mermaid",
-    "search": "Search"
+    "search": "Search",
+    "feature1": "Chat with any webpage",
+    "feature2": "Use local AI models for privacy",
+    "feature3": "Support for multiple AI providers",
+    "feature4": "Turn web browsing into organized knowledge",
+    "feature5": "Auto-save · Local storage · Easy retrieval",
+    "welcomeMessage": "Your local AI assistant, ready to answer your web-related questions",
+    "startTypingMessage": "Start typing your question..."
 }

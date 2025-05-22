@@ -76,7 +76,7 @@ export default defineConfig({
     version: "1.5.14",
     name:
       process.env.TARGET === "firefox"
-        ? "Page Mind - A Web UI for Local AI Models"
+        ? "Page Flow - Turn Web Browsing Into Organized Knowledge"
         : "__MSG_extName__",
     description: "__MSG_extDescription__",
     default_locale: "en",
@@ -127,6 +127,6 @@ export default defineConfig({
               matches: ["<all_urls>"]
             }
           ]
-        : ["pages/debug.html", "scripts/debug.js"]
+        : ["pages/debug.html", "scripts/debug.js"],
   }
 }) as any

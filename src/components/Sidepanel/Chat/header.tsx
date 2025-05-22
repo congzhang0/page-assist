@@ -65,9 +65,9 @@ export const SidepanelHeader = () => {
         <img
           className="h-6 w-auto"
           src={logoImage}
-          alt={t("common:Page Mind")}
+          alt={t("common:pageFlow", "Page Flow")}
         />
-        <span className="ml-1 text-sm ">{t("common:Page Mind")}</span>
+        <span className="ml-1 text-sm ">{t("common:pageFlow", "Page Flow")}</span>
         
         {/* Ollama状态显示 */}
         {checkOllamaStatus && (
