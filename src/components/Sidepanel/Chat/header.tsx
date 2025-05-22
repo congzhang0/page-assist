@@ -4,10 +4,8 @@ import { Link } from "react-router-dom"
 import { Tooltip, Drawer } from "antd"
 import {
   BoxesIcon,
-  BrainCog,
   CogIcon,
   EraserIcon,
-  // EraserIcon,
   HistoryIcon,
   PlusSquare,
   XIcon,
@@ -15,7 +13,6 @@ import {
   RotateCcw
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { CurrentChatModelSettings } from "@/components/Common/Settings/CurrentChatModelSettings"
 import React from "react"
 import { useStorage } from "@plasmohq/storage/hook"
 import { PromptSelect } from "@/components/Common/PromptSelect"
@@ -23,10 +20,6 @@ import { Sidebar } from "@/components/Option/Sidebar"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { isOllamaRunning } from "~/services/ollama"
 export const SidepanelHeader = () => {
-  const [hideCurrentChatModelSettings] = useStorage(
-    "hideCurrentChatModelSettings",
-    false
-  )
   const [checkOllamaStatus] = useStorage("checkOllamaStatus", true)
   const queryClient = useQueryClient()
 
@@ -64,7 +57,6 @@ export const SidepanelHeader = () => {
     history
   } = useMessage()
   const { t } = useTranslation(["sidepanel", "common", "option", "playground"])
-  const [openModelSettings, setOpenModelSettings] = React.useState(false)
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
   return (
@@ -73,9 +65,9 @@ export const SidepanelHeader = () => {
         <img
           className="h-6 w-auto"
           src={logoImage}
-          alt={t("common:Page Mind")}
+          alt={t("common:pageFlow", "Page Flow")}
         />
-        <span className="ml-1 text-sm ">{t("common:Page Mind")}</span>
+        <span className="ml-1 text-sm ">{t("common:pageFlow", "Page Flow")}</span>
         
         {/* Ollama状态显示 */}
         {checkOllamaStatus && (
@@ -147,23 +139,10 @@ export const SidepanelHeader = () => {
           setSelectedQuickPrompt={setSelectedQuickPrompt}
           className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         />
-        {!hideCurrentChatModelSettings && (
-          <Tooltip title={t("common:currentChatModelSettings")}>
-            <button
-              onClick={() => setOpenModelSettings(true)}
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-              <BrainCog className="w-5 h-5" />
-            </button>
-          </Tooltip>
-        )}
         <Link to="/settings">
           <CogIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
         </Link>
       </div>
-      <CurrentChatModelSettings
-        open={openModelSettings}
-        setOpen={setOpenModelSettings}
-      />
 
       <Drawer
         title={
