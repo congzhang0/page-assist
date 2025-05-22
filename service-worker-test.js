@@ -38,38 +38,67 @@ function findApiHandler() {
     return true;
   }
   
+  // 记录找到的处理函数数量
+  let handlersFound = 0;
+  
   // 尝试从DataProviderAPI模块导出
-  if (typeof self.DataProviderAPI !== 'undefined' && 
-      typeof self.DataProviderAPI.handleDataProviderRequest === 'function') {
-    self.handleDataProviderRequest = self.DataProviderAPI.handleDataProviderRequest;
-    log('从DataProviderAPI模块导出API处理函数到全局作用域');
-    return true;
+  if (typeof self.DataProviderAPI !== 'undefined') {
+    log('找到DataProviderAPI模块...');
+    
+    if (typeof self.DataProviderAPI.handleDataProviderRequest === 'function') {
+      self.handleDataProviderRequest = self.DataProviderAPI.handleDataProviderRequest;
+      log('从DataProviderAPI模块导出API处理函数到全局作用域');
+      handlersFound++;
+    } else {
+      log('DataProviderAPI模块不包含handleDataProviderRequest函数');
+    }
   }
   
   // 在各个模块中查找API处理函数
   for (const key in self) {
     const module = self[key];
-    if (typeof module === 'object' && module !== null && 
-        typeof module.handleDataProviderRequest === 'function') {
-      self.handleDataProviderRequest = module.handleDataProviderRequest;
-      log(`从${key}模块导出API处理函数到全局作用域`);
-      return true;
-    }
-    
-    // 深度搜索模块属性
     if (typeof module === 'object' && module !== null) {
+      // 检查直接属性
+      if (typeof module.handleDataProviderRequest === 'function') {
+        log(`在${key}模块中找到handleDataProviderRequest函数`);
+        
+        if (!self.handleDataProviderRequest) {
+          self.handleDataProviderRequest = module.handleDataProviderRequest;
+          log(`从${key}模块导出API处理函数到全局作用域`);
+          handlersFound++;
+        } else {
+          log(`已存在handleDataProviderRequest函数，不重复导出${key}模块的函数`);
+        }
+      }
+      
+      // 深度检查嵌套模块
       for (const subKey in module) {
-        if (subKey === 'handleDataProviderRequest' && typeof module[subKey] === 'function') {
-          self.handleDataProviderRequest = module[subKey];
-          log(`从${key}.${subKey}导出API处理函数到全局作用域`);
-          return true;
+        const subModule = module[subKey];
+        if (typeof subModule === 'object' && subModule !== null && 
+            typeof subModule.handleDataProviderRequest === 'function') {
+          log(`在${key}.${subKey}模块中找到handleDataProviderRequest函数`);
+          
+          if (!self.handleDataProviderRequest) {
+            self.handleDataProviderRequest = subModule.handleDataProviderRequest;
+            log(`从${key}.${subKey}模块导出API处理函数到全局作用域`);
+            handlersFound++;
+          } else {
+            log(`已存在handleDataProviderRequest函数，不重复导出${key}.${subKey}模块的函数`);
+          }
         }
       }
     }
   }
   
-  logError('无法找到API处理函数');
-  return false;
+  log(`共找到 ${handlersFound} 个API处理函数`);
+  
+  if (self.handleDataProviderRequest) {
+    log('✅ API处理函数已成功导出到全局作用域');
+    return true;
+  } else {
+    logError('❌ 无法找到API处理函数');
+    return false;
+  }
 }
 
 /**
@@ -97,6 +126,11 @@ function setupExternalListener() {
             message: 'Service Worker已收到连接'
           });
           return true;
+        }
+        
+        // 确保API处理函数可用
+        if (!self.handleDataProviderRequest) {
+          findApiHandler();
         }
         
         // 处理普通API请求

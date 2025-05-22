@@ -15,6 +15,7 @@ const path = require('path');
 // 配置
 const PORT = 8090;
 const HOST = '127.0.0.1';
+const ALTERNATIVE_PORTS = [8091, 8092, 8093, 8080, 8081]; // 备选端口
 
 // MIME类型
 const MIME_TYPES = {
@@ -65,9 +66,28 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// 启动服务器
-server.listen(PORT, HOST, () => {
-  console.log(`服务器运行在 http://${HOST}:${PORT}/`);
-  console.log(`测试页面地址: http://${HOST}:${PORT}/test-data-provider-api.html`);
-  console.log('按 Ctrl+C 停止服务器');
-}); 
+// 尝试启动服务器，如果端口被占用则尝试备选端口
+function startServer(port, alternativePorts = []) {
+  server.listen(port, HOST, () => {
+    console.log(`服务器运行在 http://${HOST}:${port}/`);
+    console.log(`测试页面地址: http://${HOST}:${port}/test-data-provider-api.html`);
+    console.log('按 Ctrl+C 停止服务器');
+  }).on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.log(`端口 ${port} 已被占用，尝试其他端口...`);
+      if (alternativePorts.length > 0) {
+        const nextPort = alternativePorts.shift();
+        startServer(nextPort, alternativePorts);
+      } else {
+        console.error('所有端口都被占用，无法启动服务器');
+        process.exit(1);
+      }
+    } else {
+      console.error('启动服务器时出错:', e);
+      process.exit(1);
+    }
+  });
+}
+
+// 启动服务器，如果默认端口不可用，尝试备选端口
+startServer(PORT, ALTERNATIVE_PORTS); 

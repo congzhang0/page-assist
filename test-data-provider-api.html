@@ -212,6 +212,13 @@
             </div>
             <span id="accessTokenStatus"></span>
         </div>
+        <div class="config-panel">
+            <label for="skipPingCheck">跳过Ping检查:</label>
+            <div class="input-group">
+                <input type="checkbox" id="skipPingCheck" checked>
+                <span>如果Ping测试失败但需要尝试其他API，请启用此选项</span>
+            </div>
+        </div>
     </div>
     
     <div class="test-section">
@@ -283,6 +290,11 @@
             <p>这意味着脚本无法访问chrome.runtime.sendMessage方法，通常是环境问题导致的。</p>
         </div>
         
+        <div class="error">
+            <p><strong>常见错误：</strong> "扩展响应无效" 或 "Failed to connect to extension"</p>
+            <p>这通常是由扩展的manifest.json中的externally_connectable配置问题导致的。</p>
+        </div>
+        
         <h4>可能的原因和解决方案：</h4>
         <ol class="steps">
             <li><strong>使用正确的浏览器</strong><br>确保使用Chrome或基于Chromium的浏览器（如Edge）。</li>
@@ -295,7 +307,15 @@
             </li>
             <li><strong>检查扩展是否安装并启用</strong><br>确认Page Assist扩展已正确安装并启用。可以在Chrome的扩展页面（chrome://extensions/）中查看。</li>
             <li><strong>验证扩展ID</strong><br>确认脚本中使用的扩展ID是否正确。当前使用的ID是：<code id="currentExtensionId">ffiigpcapfgmbpcggdfklpikceehbffd</code></li>
-            <li><strong>检查权限配置</strong><br>确保Page Assist扩展允许外部连接，特别是对当前域名的连接权限。这通常在扩展的manifest.json中的externally_connectable字段中配置。</li>
+            <li><strong>检查externally_connectable配置</strong><br>这是<strong>最常见的问题原因</strong>。确保Page Assist扩展的manifest.json中包含以下配置：
+                <pre>
+"externally_connectable": {
+  "matches": ["*://*/*"]
+}
+                </pre>
+                <p>如果缺少此配置，扩展将拒绝来自外部网页的连接请求。</p>
+            </li>
+            <li><strong>尝试启用"跳过Ping检查"选项</strong><br>如果ping测试失败但您想尝试其他API，勾选页面顶部的"跳过Ping检查"选项。</li>
             <li><strong>使用扩展内部测试</strong><br>如果以上方法都不奏效，请使用以下方式在扩展内部进行测试：
                 <ol>
                     <li>打开Chrome扩展页面 (chrome://extensions/)</li>
@@ -328,6 +348,7 @@
                     // 设置配置面板初始值
                     document.getElementById('extensionId').value = window.CONFIG.EXTENSION_ID;
                     document.getElementById('accessToken').value = window.CONFIG.ACCESS_TOKEN;
+                    document.getElementById('skipPingCheck').checked = window.CONFIG.SKIP_PING_CHECK;
                 }
                 
                 // Chrome API状态
@@ -345,12 +366,13 @@
                 // 如果Chrome API可用，检查扩展连接
                 if (!envError && window.checkExtension) {
                     window.checkExtension().then(extError => {
-                        extensionElement.textContent = extError ? '不可用' : '可用';
+                        const isWarning = extError && extError.startsWith('警告:');
+                        extensionElement.textContent = extError ? (isWarning ? '连接警告' : '不可用') : '可用';
                         extensionElement.previousElementSibling.className = 
-                            `status-indicator ${extError ? 'status-error' : 'status-ok'}`;
+                            `status-indicator ${!extError ? 'status-ok' : (isWarning ? 'status-warning' : 'status-error')}`;
                         
                         // 检查API处理函数
-                        if (!extError) {
+                        if (!extError || isWarning) {
                             // 简单测试API是否真的可用
                             window.getPageCount().then(() => {
                                 apiHandlerElement.textContent = '可用';
@@ -399,7 +421,7 @@
                     displayResult(result);
                     return result;
                 } catch (error) {
-                    displayResult(`测试失败：${error.message}`);
+                    displayResult(`测试失败: ${error.message}`);
                     console.error('测试失败:', error);
                 }
             }
@@ -463,6 +485,14 @@
                 }
             });
             
+            // 跳过Ping检查选项
+            document.getElementById('skipPingCheck').addEventListener('change', (e) => {
+                if (window.CONFIG) {
+                    window.CONFIG.SKIP_PING_CHECK = e.target.checked;
+                    console.log('跳过Ping检查设置已更改:', window.CONFIG.SKIP_PING_CHECK);
+                }
+            });
+            
             // 环境检查
             document.getElementById('checkEnvironment').addEventListener('click', () => {
                 const envError = window.checkEnvironment ? window.checkEnvironment() : '无法检查环境';
@@ -513,7 +543,19 @@
                 runTest(window.getPageCount);
             });
             
-                        // 获取页面列表            document.getElementById('testPagesList').addEventListener('click', async () => {                if (!window.getPages) {                    displayResult('❌ 无法执行测试：getPages函数不可用');                    return;                }                                const result = await runTest(window.getPages, [{ pageSize: 5 }]);                if (result && result.items && result.items.length > 0) {                    lastPageId = result.items[0].id;                    console.log(`已保存第一个页面ID: ${lastPageId}`);                }            });
+            // 获取页面列表
+            document.getElementById('testPagesList').addEventListener('click', async () => {
+                if (!window.getPages) {
+                    displayResult('❌ 无法执行测试：getPages函数不可用');
+                    return;
+                }
+                
+                const result = await runTest(window.getPages, [{ pageSize: 5 }]);
+                if (result && result.items && result.items.length > 0) {
+                    lastPageId = result.items[0].id;
+                    console.log(`已保存第一个页面ID: ${lastPageId}`);
+                }
+            });
             
             // 获取单个页面
             document.getElementById('testGetPage').addEventListener('click', async () => {

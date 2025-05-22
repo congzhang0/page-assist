@@ -141,6 +141,12 @@ function setupMessageListenerIfNeeded() {
         chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
             console.log('收到外部消息:', request, '来自:', sender);
             
+            // 特殊处理ping请求 - 确保有实体类型
+            if (request && request.type === 'ping' && !request.entityType) {
+                console.log('收到ping请求，但缺少实体类型，自动添加entityType=page');
+                request.entityType = 'page';
+            }
+            
             if (request && (request.accessToken || request.type === 'ping')) {
                 if (typeof globalScope[REAL_API_HANDLER_NAME] === 'function') {
                     globalScope[REAL_API_HANDLER_NAME](request, sender)
@@ -347,6 +353,34 @@ function testViaMessaging() {
     });
 }
 
+// 工具函数：测试Ping请求 
+function testPingRequest() {
+    console.log('🔄 测试Ping请求...');
+    
+    const pingRequest = {
+        type: 'ping',
+        entityType: 'page', // 必须添加实体类型，避免 entity_type_not_allowed 错误
+        accessToken: ACCESS_TOKEN,
+        clientId: 'test_client_' + Date.now()
+    };
+    
+    console.log('📤 发送Ping请求:', pingRequest);
+    
+    if (typeof globalScope[REAL_API_HANDLER_NAME] !== 'function') {
+        console.error('❌ 无法测试Ping：处理函数不存在。请确保API已正确初始化。');
+        return;
+    }
+    
+    // 直接调用API处理函数进行测试
+    globalScope[REAL_API_HANDLER_NAME](pingRequest, { id: chrome.runtime.id })
+        .then(response => {
+            console.log('✅ Ping测试成功:', response);
+        })
+        .catch(error => {
+            console.error('❌ Ping测试失败:', error);
+        });
+}
+
 // 初始化：检查状态并进行必要的设置
 function initialize() {
     console.log('🚀 初始化数据提供者API快速修复工具...');
@@ -380,6 +414,7 @@ function initialize() {
     console.log('- testApi(): 测试一个实体类型的API');
     console.log('- testAllEntityTypes(): 测试所有实体类型的API');
     console.log('- testViaMessaging(): 通过消息传递测试API');
+    console.log('- testPingRequest(): 测试Ping请求');
     console.log('- checkRealApiHandlerPresence(): 检查API处理函数是否存在');
     console.log('- exposeApiHandlerToGlobalScope(): 尝试找到并导出API处理函数');
 }
@@ -388,6 +423,7 @@ function initialize() {
 globalScope.testApi = testApi;
 globalScope.testAllEntityTypes = testAllEntityTypes;
 globalScope.testViaMessaging = testViaMessaging;
+globalScope.testPingRequest = testPingRequest;
 globalScope.checkMessageListeners = checkMessageListeners;
 globalScope.checkRealApiHandlerPresence = checkRealApiHandlerPresence;
 globalScope.exposeApiHandlerToGlobalScope = exposeApiHandlerToGlobalScope;

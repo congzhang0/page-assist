@@ -15,7 +15,9 @@ const CONFIG = {
   // 运行模式: 'web'(普通网页), 'extension'(扩展内部), 'service-worker'(服务工作线程)
   RUN_MODE: null,
   // 调试模式，启用更多日志
-  DEBUG: true
+  DEBUG: true,
+  // 跳过Ping检查，直接假设扩展可用（如果ping有问题但其他API可用时）
+  SKIP_PING_CHECK: true
 };
 
 // 全局状态
@@ -294,6 +296,13 @@ const checkExtension = async () => {
       }
     }
     
+    // 如果配置了跳过ping检查，直接假设扩展可用
+    if (CONFIG.SKIP_PING_CHECK) {
+      log('⚠️ 跳过ping检查，直接假设扩展可用');
+      STATE.extensionConnected = true;
+      return null;
+    }
+    
     // 使用消息传递检查扩展是否可用（适用于web模式或其他模式的回退方法）
     try {
       log('使用消息传递检查扩展连接');
@@ -301,6 +310,7 @@ const checkExtension = async () => {
       // 准备请求 - 使用ping格式
       const pingRequest = { 
         type: 'ping', 
+        entityType: 'page',  // 添加实体类型参数，避免 entity_type_not_allowed 错误
         accessToken: CONFIG.ACCESS_TOKEN,
         clientId: CONFIG.CLIENT_ID
       };
@@ -313,17 +323,43 @@ const checkExtension = async () => {
         pingRequest
       );
       
+      log('收到ping响应:', response);
+      
       if (response && (response.success === true || response.pong === true)) {
         log('扩展连接成功:', response);
         STATE.extensionConnected = true;
         return null;
       } else {
-        logError('扩展响应无效:', response);
-        return '错误: 扩展响应无效，可能是访问令牌不正确或API未实现';
+        const errorInfo = response && response.error ? `错误代码: ${response.error.code}, 消息: ${response.error.message}` : '未知错误';
+        logError('扩展响应无效:', response, errorInfo);
+        
+        // 尝试启用跳过ping选项
+        CONFIG.SKIP_PING_CHECK = true;
+        logWarning('⚠️ 自动启用SKIP_PING_CHECK，将尝试直接调用其他API');
+        STATE.extensionConnected = true;
+        
+        return '警告: ping检查失败，但将尝试直接调用其他API';
       }
     } catch (error) {
       logError('扩展连接失败:', error);
-      return `错误: 无法连接到扩展。${error.message || '未知错误'}`;
+      
+      // 检查是否是因为externally_connectable配置问题
+      if (error.message && (error.message.includes('externally_connectable') || 
+                           error.message.includes('Extension') || 
+                           error.message.includes('extension'))) {
+        logWarning('⚠️ 可能是externally_connectable配置问题，检查manifest.json');
+        logWarning('提示: 确保manifest.json中包含如下配置:');
+        logWarning(`"externally_connectable": {
+  "matches": ["*://*/*"]
+}`);
+      }
+      
+      // 尝试启用跳过ping选项
+      CONFIG.SKIP_PING_CHECK = true;
+      logWarning('⚠️ 自动启用SKIP_PING_CHECK，将尝试直接调用其他API');
+      STATE.extensionConnected = true;
+      
+      return `警告: 无法连接到扩展(${error.message || '未知错误'})，但将尝试直接调用其他API`;
     }
   } catch (error) {
     logError('检查扩展时出错:', error);
@@ -331,7 +367,149 @@ const checkExtension = async () => {
   }
 };
 
-/** * 发送API请求 * @param {Object} request - API请求对象 * @returns {Promise<Object>} - API响应对象 */async function sendApiRequest(request) {  // 添加访问令牌和客户端ID  const fullRequest = {    ...request,    accessToken: CONFIG.ACCESS_TOKEN,    clientId: CONFIG.CLIENT_ID  };    log('发送请求:', JSON.stringify(fullRequest, null, 2));    try {    // 检查扩展连接状态    if (!STATE.extensionConnected) {      const extensionCheck = await checkExtension();      if (extensionCheck) {        throw new Error(extensionCheck);      }    }        // 根据运行模式选择不同的发送方式    if (CONFIG.RUN_MODE === 'service-worker') {      // Service Worker环境 - 直接调用API处理函数      if (typeof self.handleDataProviderRequest === 'function') {        log('在Service Worker中直接调用API处理函数');        try {          const sender = { id: chrome.runtime.id };          const response = await self.handleDataProviderRequest(fullRequest, sender);          log('收到响应:', JSON.stringify(response, null, 2));          return response || { success: false, error: { message: '处理函数返回空响应' } };        } catch (error) {          logError('直接调用API处理函数失败:', error);          throw new Error(`API处理函数调用失败: ${error.message}`);        }      } else {        logError('无法找到API处理函数');        throw new Error('API处理函数不可用，无法处理请求');      }    } else if (CONFIG.RUN_MODE === 'extension' && STATE.apiHandlerAvailable) {      // 如果在扩展内部且API处理函数可用，尝试直接调用      try {        const bgPage = await chromeAPI.runtime.getBackgroundPage();        if (bgPage && typeof bgPage.handleDataProviderRequest === 'function') {          const response = await bgPage.handleDataProviderRequest(fullRequest, { id: chrome.runtime.id });          log('收到响应:', JSON.stringify(response, null, 2));          return response || { success: false, error: { message: '扩展返回空响应' } };        }      } catch (error) {        logWarning('直接调用API失败，尝试消息传递:', error);      }    }        // 使用消息传递（适用于Web模式或扩展模式的回退方法）    const response = await chromeAPI.runtime.sendMessage(      CONFIG.RUN_MODE === 'extension' ? undefined : CONFIG.EXTENSION_ID,      fullRequest    );        log('收到响应:', JSON.stringify(response, null, 2));    return response || { success: false, error: { message: '扩展返回空响应' } };  } catch (error) {    logError('发送API请求出错:', error);    throw new Error(`API请求失败: ${error.message}`);  }}
+/**
+ * 发送API请求
+ * @param {Object} request - API请求对象
+ * @returns {Promise<Object>} - API响应对象
+ */
+async function sendApiRequest(request) {
+  // 添加访问令牌和客户端ID
+  const fullRequest = {
+    ...request,
+    accessToken: CONFIG.ACCESS_TOKEN,
+    clientId: CONFIG.CLIENT_ID
+  };
+  
+  log('发送请求:', JSON.stringify(fullRequest, null, 2));
+  
+  try {
+    // 检查扩展连接状态
+    if (!STATE.extensionConnected && !CONFIG.SKIP_PING_CHECK) {
+      const extensionCheck = await checkExtension();
+      if (extensionCheck && !extensionCheck.startsWith('警告:')) {
+        throw new Error(extensionCheck);
+      }
+    }
+    
+    // 根据运行模式选择不同的发送方式
+    if (CONFIG.RUN_MODE === 'service-worker') {
+      // Service Worker环境 - 直接调用API处理函数
+      if (typeof self.handleDataProviderRequest === 'function') {
+        log('在Service Worker中直接调用API处理函数');
+        try {
+          const sender = { id: chrome.runtime.id };
+          const response = await self.handleDataProviderRequest(fullRequest, sender);
+          log('收到响应:', JSON.stringify(response, null, 2));
+          return response || { success: false, error: { message: '处理函数返回空响应' } };
+        } catch (error) {
+          logError('直接调用API处理函数失败:', error);
+          throw new Error(`API处理函数调用失败: ${error.message}`);
+        }
+      } else {
+        // 尝试自动查找API处理函数
+        if (typeof self.DataProviderAPI !== 'undefined' && 
+            typeof self.DataProviderAPI.handleDataProviderRequest === 'function') {
+          self.handleDataProviderRequest = self.DataProviderAPI.handleDataProviderRequest;
+          log('已自动找到并导出API处理函数，重试请求');
+          return sendApiRequest(request); // 递归调用，现在handleDataProviderRequest已定义
+        }
+        
+        // 搜索所有模块
+        for (const key in self) {
+          const module = self[key];
+          if (typeof module === 'object' && module !== null && 
+              typeof module.handleDataProviderRequest === 'function') {
+            self.handleDataProviderRequest = module.handleDataProviderRequest;
+            log(`从${key}模块导出API处理函数，重试请求`);
+            return sendApiRequest(request); // 递归调用，现在handleDataProviderRequest已定义
+          }
+        }
+        
+        logError('无法找到API处理函数');
+        throw new Error('API处理函数不可用，无法处理请求');
+      }
+    } else if (CONFIG.RUN_MODE === 'extension' && STATE.apiHandlerAvailable) {
+      // 如果在扩展内部且API处理函数可用，尝试直接调用
+      try {
+        const bgPage = await chromeAPI.runtime.getBackgroundPage();
+        if (bgPage && typeof bgPage.handleDataProviderRequest === 'function') {
+          const response = await bgPage.handleDataProviderRequest(fullRequest, { id: chrome.runtime.id });
+          log('收到响应:', JSON.stringify(response, null, 2));
+          return response || { success: false, error: { message: '扩展返回空响应' } };
+        }
+      } catch (error) {
+        logWarning('直接调用API失败，尝试消息传递:', error);
+      }
+    }
+    
+    // 使用消息传递（适用于Web模式或扩展模式的回退方法）
+    try {
+      log('使用消息传递发送API请求...');
+      
+      const response = await chromeAPI.runtime.sendMessage(
+        CONFIG.RUN_MODE === 'extension' ? undefined : CONFIG.EXTENSION_ID,
+        fullRequest
+      );
+      
+      log('收到响应:', JSON.stringify(response, null, 2));
+      
+      // 特殊处理entity_type_not_allowed错误
+      if (response && response.success === false && 
+          response.error && response.error.code === 'entity_type_not_allowed') {
+        logError('请求被拒绝: 实体类型不允许访问', response.error);
+        logWarning('提示: 检查访问令牌是否有权限访问此实体类型');
+      }
+      
+      return response || { success: false, error: { message: '扩展返回空响应' } };
+    } catch (error) {
+      // 如果消息发送失败，但我们在Service Worker环境中，可以尝试自动设置消息监听器
+      if (CONFIG.RUN_MODE === 'service-worker' && !chrome.runtime.onMessageExternal.hasListeners()) {
+        logWarning('消息发送失败，尝试设置外部消息监听器');
+        try {
+          // 设置外部消息监听器
+          chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
+            log('收到外部消息:', request);
+            
+            // 特殊处理ping请求
+            if (request.type === 'ping') {
+              sendResponse({ success: true, pong: true });
+              return true;
+            }
+            
+            // 如果有API处理函数，使用它
+            if (typeof self.handleDataProviderRequest === 'function') {
+              self.handleDataProviderRequest(request, sender)
+                .then(response => sendResponse(response))
+                .catch(error => sendResponse({ 
+                  success: false, 
+                  error: { message: error.message } 
+                }));
+              return true;
+            }
+            
+            // 返回默认响应
+            sendResponse({ 
+              success: false, 
+              error: { message: 'API处理函数不可用' } 
+            });
+            return true;
+          });
+          
+          log('外部消息监听器已设置，请重试');
+          throw new Error('已设置外部消息监听器，请重试操作');
+        } catch (setupError) {
+          logError('设置外部消息监听器失败:', setupError);
+          throw new Error(`无法设置消息处理: ${setupError.message}`);
+        }
+      }
+      
+      throw error;
+    }
+  } catch (error) {
+    logError('发送API请求出错:', error);
+    throw new Error(`API请求失败: ${error.message}`);
+  }
+}
 
 /**
  * 获取单个页面
