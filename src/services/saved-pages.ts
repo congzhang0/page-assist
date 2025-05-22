@@ -5,9 +5,11 @@
 
 import { getDataFromCurrentTab, getDataFromSpecificTab } from "@/libs/get-html";
 import { getScreenshotFromCurrentTab, getScreenshotFromSpecificTab } from "@/libs/get-screenshot";
-import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/savedPages";
+import { savedPagesDB } from "@/db/savedpages";
+import type { SavedPage, SavePageParams } from "@/db/savedpages";
 import { generateSummary } from "@/services/llm-service";
 import { browser } from "wxt/browser";
+import { TaskSource } from "./auto-save";
 
 /**
  * 保存当前页面到数据库
@@ -77,6 +79,8 @@ export const saveCurrentPage = async (params?: {
   notes?: string;
   title?: string; // 可选的标题，用于自动保存时传递
   tabId?: number; // 可选的标签页ID，用于自动保存时指定标签页
+  source?: TaskSource; // 保存来源
+  sourceInfo?: string; // 来源详细信息
 }): Promise<SavedPage> => {
   logger.info('开始保存当前页面', params);
 
@@ -221,45 +225,56 @@ export const saveCurrentPage = async (params?: {
       logger.warn('生成摘要和关键词失败，将继续保存页面', error);
     }
 
-    // 合并用户提供的标签和自动生成的标签
-    const mergedTags = [...new Set([...(params?.tags || []), ...autoTags])];
+    // 保存页面到数据库
+    logger.debug('正在保存页面到数据库');
+    updateSaveStatus("3/3", "#3498db", "第3步", "正在保存页面到数据库..."); // 第三阶段：保存到数据库
 
-    // 准备保存参数
-    const saveParams: SavePageParams = {
-      title,
+    // 如果提供了自定义标题，使用自定义标题
+    const finalTitle = params?.title || title;
+
+    // 合并自动生成的标签和用户提供的标签
+    let finalTags = autoTags || [];
+    if (params?.tags && params.tags.length > 0) {
+      // 添加用户标签并去重
+      finalTags = [...new Set([...finalTags, ...params.tags])];
+    }
+
+    // Create combined notes with source info
+    const combinedNotes = params?.notes || '';
+    const sourceNotes = params?.sourceInfo ? `\n\nSource: ${params?.sourceInfo}` : '';
+
+    // 保存页面
+    const savedPage = await savedPagesDB.savePage({
       url,
+      title: finalTitle,
       content,
-      html: content, // 保存所有类型页面的原始内容
-      type,
-      tags: mergedTags,
-      notes: params?.notes || '',
+      html: pdf || '', // Ensure html is provided
+      type: type as "article" | "image" | "video" | "other", // Cast to the correct type
+      tags: finalTags,
+      notes: combinedNotes + sourceNotes,
       summary,
       rating,
-      favicon,
-      screenshot: success ? screenshot : undefined
-    };
-
-    // 保存到数据库
-     logger.debug('正在保存页面到数据库', { url, title });
-     updateSaveStatus("3/3", "#3498db", "第3步", "正在保存页面到数据库..."); // 第三阶段：保存到数据库
-
-    const savedPage = await savedPagesDB.savePage(saveParams).catch(err => {
-      logger.error('保存页面到数据库失败', err);
-       updateSaveStatus("✗", "#e74c3c", "错误", `保存页面到数据库失败: ${err.message || '未知错误'}`);
-       throw new Error(`保存页面到数据库失败: ${err.message || '未知错误'}`);
+      favicon
     });
 
-    logger.info('页面保存成功', { id: savedPage.id, title: savedPage.title, url: savedPage.url });
-     updateSaveStatus("✓", "#2ecc71", "完成", "页面保存成功！"); // 绿色表示成功
+    // 更新状态为保存成功
+    logger.info('页面保存成功', { id: savedPage.id, url, title: finalTitle });
+    updateSaveStatus("✓", "#2ecc71", "完成", "页面保存成功！"); // 绿色表示成功
+
+    // 显示成功通知
+    statusIndicator.showSaveSuccess(finalTitle);
+
     return savedPage;
   } catch (error) {
-    logger.error('保存页面过程中发生错误', error);
-    // 重新抛出错误，但保留原始错误信息
-    if (error instanceof Error) {
-      throw error;
-    } else {
-      throw new Error(`保存页面失败: ${error}`);
-    }
+    // 更新状态为保存失败
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('保存页面失败', { error: errorMessage });
+    updateSaveStatus("✗", "#e74c3c", "错误", `保存页面失败: ${errorMessage}`); // 红色表示失败
+
+    // 显示错误通知
+    statusIndicator.showSaveError(errorMessage);
+
+    throw error;
   }
 };
 
@@ -358,13 +373,15 @@ export const getAllTags = async (): Promise<string[]> => {
  */
 export const exportSavedPages = async (ids?: string[]): Promise<SavedPage[]> => {
   try {
-    const allPages = await savedPagesDB.getAllPages();
-
+    const pages = await getAllSavedPages();
+    
+    // If no IDs provided, export all pages
     if (!ids || ids.length === 0) {
-      return allPages;
+      return pages;
     }
-
-    return allPages.filter(page => ids.includes(page.id));
+    
+    // Filter pages by IDs
+    return pages.filter(page => ids.includes(page.id));
   } catch (error) {
     console.error('导出页面失败:', error);
     throw new Error('导出页面失败');

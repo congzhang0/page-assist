@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs } from 'antd';
+import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input } from 'antd';
 import {
   ClockCircleOutlined,
   LoadingOutlined,
@@ -9,28 +9,50 @@ import {
   FilterOutlined,
   HistoryOutlined,
   ReloadOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  SearchOutlined,
+  ClearOutlined,
+  LinkOutlined,
+  CalendarOutlined
 } from '@ant-design/icons';
-import { getAllSaveTasks, clearAutoSaveTask, SaveTaskStatus, manualCheckAllTabs } from '@/services/auto-save';
+import { getAllSaveTasks, clearAutoSaveTask, SaveTaskStatus, manualCheckAllTabs, TaskSource } from '@/services/auto-save';
 import type { SaveTask } from '@/services/auto-save';
+import { useTranslation } from "react-i18next";
+import dayjs from 'dayjs';
+import SaveSourceTag from './SaveSourceTag';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { TabPane } = Tabs;
+const { RangePicker } = DatePicker;
+
+// 扩展的任务类型，包含来源信息
+interface EnhancedSaveTask extends SaveTask {
+  progressStep?: string;       // 当前进行的步骤（对于保存中的任务）
+  progressPercent?: number;    // 当前步骤的进度百分比
+}
 
 /**
  * 下载队列组件
- * 显示当前准备下载的页面和正在下载的页面
+ * 显示当前准备下载的页面和正在下载的页面，以及历史记录
  */
 const DownloadQueue: React.FC = () => {
-  const [tasks, setTasks] = useState<SaveTask[]>([]);
+  const { t } = useTranslation(["settings", "common"]);
+  const [tasks, setTasks] = useState<EnhancedSaveTask[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState('active');
+  const [historyTab, setHistoryTab] = useState('all');
   const [checkingTabs, setCheckingTabs] = useState(false);
   const [checkStats, setCheckStats] = useState<{
     checked: number;
     setup: number;
     filtered: number;
   } | null>(null);
+  
+  // 搜索和筛选状态
+  const [searchText, setSearchText] = useState('');
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<TaskSource | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<SaveTaskStatus | 'all'>('all');
 
   // 加载任务列表
   useEffect(() => {
@@ -38,7 +60,42 @@ const DownloadQueue: React.FC = () => {
       try {
         const allTasks = await getAllSaveTasks();
         console.log('下载队列任务数量:', allTasks.length);
-        setTasks(allTasks);
+        
+        // 扩展任务信息，添加进度信息
+        const enhancedTasks: EnhancedSaveTask[] = allTasks.map(task => {
+          // 为保存中的任务添加模拟进度信息
+          let progressStep;
+          let progressPercent;
+          
+          if (task.status === SaveTaskStatus.SAVING) {
+            // 根据时间计算一个模拟进度
+            const elapsedTime = Date.now() - task.scheduledAt;
+            if (elapsedTime < 1000) {
+              progressStep = "初始化";
+              progressPercent = 10;
+            } else if (elapsedTime < 2000) {
+              progressStep = "获取页面内容";
+              progressPercent = 30;
+            } else if (elapsedTime < 3000) {
+              progressStep = "解析页面";
+              progressPercent = 50;
+            } else if (elapsedTime < 4000) {
+              progressStep = "提取关键信息";
+              progressPercent = 70;
+            } else {
+              progressStep = "保存到数据库";
+              progressPercent = 90;
+            }
+          }
+          
+          return {
+            ...task,
+            progressStep,
+            progressPercent
+          };
+        });
+        
+        setTasks(enhancedTasks);
       } catch (error) {
         console.error('加载下载队列任务失败:', error);
       }
@@ -80,7 +137,7 @@ const DownloadQueue: React.FC = () => {
   };
 
   // 获取任务状态标签
-  const getStatusTag = (task: SaveTask) => {
+  const getStatusTag = (task: EnhancedSaveTask) => {
     // 检查是否是被过滤的任务（timeoutId === -1 是虚拟的timeoutId，表示被过滤的任务）
     if (task.timeoutId === -1) {
       return <Tag color="warning" icon={<FilterOutlined />}>已过滤</Tag>;
@@ -100,8 +157,13 @@ const DownloadQueue: React.FC = () => {
     }
   };
 
+  // 获取任务来源标签
+  const getSourceTag = (task: EnhancedSaveTask) => (
+    <SaveSourceTag source={task.source} sourceInfo={task.sourceInfo} />
+  );
+
   // 计算等待进度
-  const calculateProgress = (task: SaveTask) => {
+  const calculateProgress = (task: EnhancedSaveTask) => {
     if (task.status !== SaveTaskStatus.WAITING || task.timeoutId === -1) return 100;
 
     const now = Date.now();
@@ -115,7 +177,7 @@ const DownloadQueue: React.FC = () => {
   };
 
   // 格式化剩余时间
-  const formatRemainingTime = (task: SaveTask) => {
+  const formatRemainingTime = (task: EnhancedSaveTask) => {
     if (task.status !== SaveTaskStatus.WAITING || task.timeoutId === -1) return '';
 
     const now = Date.now();
@@ -133,17 +195,134 @@ const DownloadQueue: React.FC = () => {
     }
   };
 
+  // 清除所有筛选条件
+  const clearFilters = () => {
+    setSearchText('');
+    setDateRange(null);
+    setSourceFilter('all');
+    setStatusFilter('all');
+  };
+
+  // 筛选任务列表
+  const filterTasks = (taskList: EnhancedSaveTask[]): EnhancedSaveTask[] => {
+    return taskList.filter(task => {
+      // 搜索文本筛选
+      if (searchText && !(
+        (task.title && task.title.toLowerCase().includes(searchText.toLowerCase())) ||
+        task.url.toLowerCase().includes(searchText.toLowerCase())
+      )) {
+        return false;
+      }
+      
+      // 日期范围筛选
+      if (dateRange && dateRange[0] && dateRange[1]) {
+        const taskDate = new Date(task.createdAt);
+        const startDate = dateRange[0].toDate();
+        const endDate = dateRange[1].toDate();
+        endDate.setHours(23, 59, 59, 999); // 设置为当天结束
+        
+        if (taskDate < startDate || taskDate > endDate) {
+          return false;
+        }
+      }
+      
+      // 来源类型筛选
+      if (sourceFilter !== 'all' && task.source !== sourceFilter) {
+        return false;
+      }
+      
+      // 状态筛选
+      if (statusFilter !== 'all' && task.status !== statusFilter) {
+        return false;
+      }
+      
+      return true;
+    });
+  };
+
   // 按状态对任务进行分组
   const waitingTasks = tasks.filter(task => task.status === SaveTaskStatus.WAITING && task.timeoutId !== -1);
   const savingTasks = tasks.filter(task => task.status === SaveTaskStatus.SAVING);
-  const completedTasks = tasks.filter(task => task.status === SaveTaskStatus.COMPLETED);
-  const failedTasks = tasks.filter(task => task.status === SaveTaskStatus.FAILED);
-  const filteredTasks = tasks.filter(task => task.timeoutId === -1);
+  const completedTasks = filterTasks(tasks.filter(task => task.status === SaveTaskStatus.COMPLETED));
+  const failedTasks = filterTasks(tasks.filter(task => task.status === SaveTaskStatus.FAILED));
+  const filteredTasks = filterTasks(tasks.filter(task => task.timeoutId === -1));
 
   // 活跃任务（等待中和保存中）
   const activeTasks = [...waitingTasks, ...savingTasks];
-  // 历史任务（已完成和失败）
-  const historyTasks = [...completedTasks, ...failedTasks];
+  
+  // 获取历史记录任务列表（根据选择的子标签）
+  const getHistoryTasks = () => {
+    switch (historyTab) {
+      case 'completed':
+        return completedTasks;
+      case 'failed':
+        return failedTasks;
+      case 'filtered':
+        return filteredTasks;
+      case 'all':
+      default:
+        return [...completedTasks, ...failedTasks, ...filteredTasks];
+    }
+  };
+
+  // 历史记录表格列定义
+  const historyColumns = [
+    {
+      title: '标题/URL',
+      dataIndex: 'title',
+      key: 'title',
+      render: (text: string, record: EnhancedSaveTask) => (
+        <div>
+          <div className="font-medium">{text || '无标题'}</div>
+          <div className="text-xs text-gray-500 truncate" style={{ maxWidth: 300 }}>{record.url}</div>
+        </div>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (_: any, record: EnhancedSaveTask) => getStatusTag(record),
+    },
+    {
+      title: '来源',
+      dataIndex: 'source',
+      key: 'source',
+      render: (_: any, record: EnhancedSaveTask) => getSourceTag(record),
+    },
+    {
+      title: '时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (createdAt: number) => (
+        <div>
+          <div>{new Date(createdAt).toLocaleDateString()}</div>
+          <div className="text-xs text-gray-500">{new Date(createdAt).toLocaleTimeString()}</div>
+        </div>
+      ),
+    },
+    {
+      title: '详情',
+      key: 'details',
+      render: (_: any, record: EnhancedSaveTask) => (
+        <Space>
+          {record.error && (
+            <Tooltip title={record.error}>
+              <Button type="text" danger size="small" icon={<InfoCircleOutlined />} />
+            </Tooltip>
+          )}
+          <Tooltip title="在新标签页打开">
+            <Button 
+              type="text" 
+              size="small" 
+              icon={<LinkOutlined />} 
+              onClick={() => window.open(record.url, '_blank')}
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
 
   return (
     <Card
@@ -162,7 +341,7 @@ const DownloadQueue: React.FC = () => {
     >
       {/* 统计信息 */}
       <div className="mb-4">
-        <Space size="large">
+        <Space size="large" wrap>
           <Statistic title="等待中" value={waitingTasks.length} />
           <Statistic title="保存中" value={savingTasks.length} />
           <Statistic title="已完成" value={completedTasks.length} />
@@ -189,9 +368,19 @@ const DownloadQueue: React.FC = () => {
         </div>
       )}
 
-      {/* 任务列表 */}
+      {/* 主要内容标签页 */}
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        <TabPane tab="活跃任务" key="active">
+        {/* 活跃任务标签页 */}
+        <TabPane 
+          tab={
+            <span>
+              <Badge count={activeTasks.length} overflowCount={99} size="small">
+                <Text>活跃任务</Text>
+              </Badge>
+            </span>
+          } 
+          key="active"
+        >
           {activeTasks.length === 0 ? (
             <Empty description="当前没有活跃的下载任务" />
           ) : (
@@ -215,6 +404,14 @@ const DownloadQueue: React.FC = () => {
                               icon={<DeleteOutlined />}
                               onClick={() => handleCancelTask(task.tabId)}
                             />
+                          </Tooltip>,
+                          <Tooltip key="open" title="在新标签页打开">
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<LinkOutlined />}
+                              onClick={() => window.open(task.url, '_blank')}
+                            />
                           </Tooltip>
                         ]}
                       >
@@ -223,11 +420,7 @@ const DownloadQueue: React.FC = () => {
                             <Space>
                               <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
                               {getStatusTag(task)}
-                              {task.matchedRule && (
-                                <Tooltip title={`匹配规则: ${task.matchedRule}`}>
-                                  <InfoCircleOutlined />
-                                </Tooltip>
-                              )}
+                              {getSourceTag(task)}
                             </Space>
                           }
                           description={
@@ -265,117 +458,22 @@ const DownloadQueue: React.FC = () => {
                             <Space>
                               <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
                               {getStatusTag(task)}
-                              {task.matchedRule && (
-                                <Tooltip title={`匹配规则: ${task.matchedRule}`}>
-                                  <InfoCircleOutlined />
-                                </Tooltip>
-                              )}
-                            </Space>
-                          }
-                          description={
-                            <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </TabPane>
-
-        <TabPane tab="历史记录" key="history">
-          {historyTasks.length === 0 ? (
-            <Empty description="没有历史下载记录" />
-          ) : (
-            <>
-              {/* 最近完成的任务 */}
-              {completedTasks.length > 0 && (
-                <div className="mb-4">
-                  <Title level={5}>最近完成的任务 ({completedTasks.length})</Title>
-                  <List
-                    size="small"
-                    bordered
-                    dataSource={completedTasks}
-                    renderItem={task => (
-                      <List.Item>
-                        <List.Item.Meta
-                          title={
-                            <Space>
-                              <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
-                              {getStatusTag(task)}
-                              {task.matchedRule && (
-                                <Tooltip title={`匹配规则: ${task.matchedRule}`}>
-                                  <InfoCircleOutlined />
-                                </Tooltip>
-                              )}
+                              {getSourceTag(task)}
                             </Space>
                           }
                           description={
                             <div>
                               <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
-                              <div>
-                                <Text type="secondary">
-                                  {new Date(task.createdAt).toLocaleString()}
-                                </Text>
-                              </div>
-                            </div>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              )}
-
-              {/* 失败的任务 */}
-              {failedTasks.length > 0 && (
-                <div>
-                  <Title level={5}>失败的任务 ({failedTasks.length})</Title>
-                  <List
-                    size="small"
-                    bordered
-                    dataSource={failedTasks}
-                    renderItem={task => (
-                      <List.Item
-                        actions={[
-                          <Tooltip key="remove" title="移除">
-                            <Button
-                              type="text"
-                              danger
-                              size="small"
-                              icon={<DeleteOutlined />}
-                              onClick={() => handleCancelTask(task.tabId)}
-                            />
-                          </Tooltip>
-                        ]}
-                      >
-                        <List.Item.Meta
-                          title={
-                            <Space>
-                              <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
-                              {getStatusTag(task)}
-                              {task.matchedRule && (
-                                <Tooltip title={`匹配规则: ${task.matchedRule}`}>
-                                  <InfoCircleOutlined />
-                                </Tooltip>
-                              )}
-                            </Space>
-                          }
-                          description={
-                            <div>
-                              <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
-                              {task.error && (
+                              {task.progressStep && (
                                 <div className="mt-1">
-                                  <Text type="danger">{task.error}</Text>
+                                  <Progress 
+                                    percent={task.progressPercent || 0} 
+                                    size="small" 
+                                    status="active"
+                                    format={() => task.progressStep}
+                                  />
                                 </div>
                               )}
-                              <div>
-                                <Text type="secondary">
-                                  {new Date(task.createdAt).toLocaleString()}
-                                </Text>
-                              </div>
                             </div>
                           }
                         />
@@ -388,45 +486,98 @@ const DownloadQueue: React.FC = () => {
           )}
         </TabPane>
 
-        <TabPane tab="被过滤的URL" key="filtered">
-          {filteredTasks.length === 0 ? (
-            <Empty description="没有被过滤的URL" />
-          ) : (
-            <div>
-              <List
-                size="small"
-                bordered
-                dataSource={filteredTasks}
-                renderItem={task => (
-                  <List.Item>
-                    <List.Item.Meta
-                      title={
-                        <Space>
-                          <Text ellipsis style={{ maxWidth: 300 }}>{task.title || task.url}</Text>
-                          {getStatusTag(task)}
-                        </Space>
-                      }
-                      description={
-                        <div>
-                          <Text type="secondary" ellipsis style={{ maxWidth: 400 }}>{task.url}</Text>
-                          {task.error && (
-                            <div className="mt-1">
-                              <Text type="secondary">过滤原因: {task.error}</Text>
-                            </div>
-                          )}
-                          <div>
-                            <Text type="secondary">
-                              {new Date(task.createdAt).toLocaleString()}
-                            </Text>
-                          </div>
-                        </div>
-                      }
-                    />
-                  </List.Item>
-                )}
-              />
+        {/* 历史记录标签页 */}
+        <TabPane 
+          tab={
+            <span>
+              <Badge count={completedTasks.length + failedTasks.length + filteredTasks.length} overflowCount={99} size="small">
+                <Text>历史记录</Text>
+              </Badge>
+            </span>
+          } 
+          key="history"
+        >
+          {/* 筛选器 */}
+          <div className="mb-4 p-4 border border-gray-200 rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <div className="mb-1 text-sm font-medium">搜索</div>
+                <Input
+                  placeholder="搜索标题或URL"
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  prefix={<SearchOutlined />}
+                  allowClear
+                />
+              </div>
+              
+              <div className="flex-1 min-w-[200px]">
+                <div className="mb-1 text-sm font-medium">日期范围</div>
+                <RangePicker 
+                  value={dateRange}
+                  onChange={value => setDateRange(value)}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              
+              <div className="w-[150px]">
+                <div className="mb-1 text-sm font-medium">来源</div>
+                <Select
+                  style={{ width: '100%' }}
+                  value={sourceFilter}
+                  onChange={setSourceFilter}
+                  options={[
+                    { value: 'all', label: '全部来源' },
+                    { value: TaskSource.MANUAL, label: '手动保存' },
+                    { value: TaskSource.AUTO_RULE, label: '规则自动' },
+                    { value: TaskSource.AUTO_TABS, label: '标签页批量' },
+                  ]}
+                />
+              </div>
+              
+              <div className="w-[150px]">
+                <div className="mb-1 text-sm font-medium">状态</div>
+                <Select
+                  style={{ width: '100%' }}
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: 'all', label: '全部状态' },
+                    { value: SaveTaskStatus.COMPLETED, label: '已完成' },
+                    { value: SaveTaskStatus.FAILED, label: '失败' },
+                  ]}
+                />
+              </div>
+              
+              <div>
+                <Button 
+                  icon={<ClearOutlined />} 
+                  onClick={clearFilters}
+                >
+                  清除筛选
+                </Button>
+              </div>
             </div>
-          )}
+          </div>
+
+          {/* 历史记录子标签页 */}
+          <Tabs activeKey={historyTab} onChange={setHistoryTab} size="small" tabPosition="top">
+            <TabPane tab={`全部记录 (${completedTasks.length + failedTasks.length + filteredTasks.length})`} key="all" />
+            <TabPane tab={`已完成 (${completedTasks.length})`} key="completed" />
+            <TabPane tab={`失败 (${failedTasks.length})`} key="failed" />
+            <TabPane tab={`被过滤 (${filteredTasks.length})`} key="filtered" />
+          </Tabs>
+
+          {/* 历史记录表格 */}
+          <div className="mt-4">
+            <Table
+              columns={historyColumns}
+              dataSource={getHistoryTasks()}
+              rowKey={(record) => `${record.tabId}-${record.createdAt}`}
+              pagination={{ pageSize: 10 }}
+              size="small"
+            />
+          </div>
         </TabPane>
       </Tabs>
     </Card>
