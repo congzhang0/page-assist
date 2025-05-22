@@ -45,7 +45,7 @@ export interface SaveTask {
   tabId: number;
   url: string;
   title?: string;
-  timeoutId: number | unknown;  // 使用更通用的类型避免类型问题
+  timeoutId: NodeJS.Timeout | number | unknown;  // 支持NodeJS.Timeout和数字标识符
   createdAt: number;      // 创建时间
   scheduledAt: number;    // 计划保存时间
   status: SaveTaskStatus; // 任务状态
@@ -408,6 +408,35 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
       
       return;
     }
+    
+    // 检查URL是否已经保存过，避免重复保存
+    const alreadySaved = await isUrlAlreadySaved(url);
+    if (alreadySaved) {
+      logger.info(`URL已经保存过，跳过自动保存: ${url}`);
+      
+      // 更新任务状态为已完成，因为实际上这个URL已经保存过了
+      if (task) {
+        task.status = SaveTaskStatus.COMPLETED;
+        task.steps?.push({
+          step: '检查URL是否已保存',
+          timestamp: Date.now(),
+          status: 'success',
+          message: 'URL已经保存过，跳过重复保存'
+        });
+        saveTasks.set(tabId, task);
+        await persistTasks();
+      }
+      
+      // 获取现有页面并返回
+      const existingPages = await getAllSavedPages({ searchText: url });
+      const existingPage = existingPages.find(page => page.url === url);
+      if (existingPage) {
+        return existingPage;
+      }
+      
+      // 万一没找到精确匹配的页面(极少数情况)，继续保存流程
+      logger.warn(`URL已存在但未找到精确匹配的页面，将继续保存流程: ${url}`);
+    }
 
     // 检查URL是否应该自动保存
     const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
@@ -538,38 +567,6 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
       });
       saveTasks.set(tabId, task);
       await persistTasks();
-    }
-
-    // 检查URL是否已经保存过
-    const alreadySaved = await isUrlAlreadySaved(url);
-    if (alreadySaved) {
-      logger.info('URL已经保存过，将更新现有记录:', url);
-      
-      // 记录步骤：检查URL是否已保存
-      if (task) {
-        task.steps?.push({
-          step: '检查URL是否已保存',
-          timestamp: Date.now(),
-          status: 'success',
-          message: 'URL已经保存过，将更新现有记录'
-        });
-        saveTasks.set(tabId, task);
-        await persistTasks();
-      }
-    } else {
-      logger.info('URL未保存过，将创建新记录:', url);
-      
-      // 记录步骤：检查URL是否已保存
-      if (task) {
-        task.steps?.push({
-          step: '检查URL是否已保存',
-          timestamp: Date.now(),
-          status: 'success',
-          message: 'URL未保存过，将创建新记录'
-        });
-        saveTasks.set(tabId, task);
-        await persistTasks();
-      }
     }
 
     // 记录步骤：开始保存页面
@@ -865,7 +862,18 @@ const recordFilteredUrl = async (
 export const clearAutoSaveTask = async (tabId: number): Promise<void> => {
   const task = saveTasks.get(tabId);
   if (task) {
-    clearTimeout(task.timeoutId);
+    // 检查timeoutId类型并安全地清除定时器
+    if (typeof task.timeoutId === 'number' && task.timeoutId > 0) {
+      clearTimeout(task.timeoutId as number);
+    } else if (task.timeoutId) {
+      // 尝试清除其他类型的定时器
+      try {
+        clearTimeout(task.timeoutId as NodeJS.Timeout);
+      } catch (e) {
+        logger.error(`清除定时器失败: ${e}`);
+      }
+    }
+    
     saveTasks.delete(tabId);
     logger.debug(`已清除标签页 ${tabId} 的自动保存任务`);
 
@@ -966,7 +974,18 @@ const loadTasks = async (): Promise<void> => {
 
     // 清除当前内存中的任务
     saveTasks.forEach((_, tabId) => {
-      clearTimeout(saveTasks.get(tabId)?.timeoutId);
+      const task = saveTasks.get(tabId);
+      if (task && task.timeoutId) {
+        try {
+          if (typeof task.timeoutId === 'number' && task.timeoutId > 0) {
+            clearTimeout(task.timeoutId);
+          } else {
+            clearTimeout(task.timeoutId as NodeJS.Timeout);
+          }
+        } catch (e) {
+          // 忽略清除错误
+        }
+      }
     });
     saveTasks.clear();
 

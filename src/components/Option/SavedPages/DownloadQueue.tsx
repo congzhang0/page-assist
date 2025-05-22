@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input, Modal, Timeline } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input, Modal, Timeline, Switch } from 'antd';
 import {
   ClockCircleOutlined,
   LoadingOutlined,
@@ -13,7 +13,8 @@ import {
   SearchOutlined,
   ClearOutlined,
   LinkOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  SyncOutlined
 } from '@ant-design/icons';
 import { getAllSaveTasks, clearAutoSaveTask, SaveTaskStatus, manualCheckAllTabs, TaskSource } from '@/services/auto-save';
 import type { SaveTask, SaveTaskStep } from '@/services/auto-save';
@@ -58,54 +59,62 @@ const DownloadQueue: React.FC = () => {
   // 步骤详情模态框状态
   const [stepsModalVisible, setStepsModalVisible] = useState(false);
   const [currentTaskWithSteps, setCurrentTaskWithSteps] = useState<EnhancedSaveTask | null>(null);
+  
+  // 自动刷新状态
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 加载任务列表
-  useEffect(() => {
-    const loadTasks = async () => {
-      try {
-        const allTasks = await getAllSaveTasks();
-        console.log('下载队列任务数量:', allTasks.length);
+  const loadTasks = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      const allTasks = await getAllSaveTasks();
+      console.log('下载队列任务数量:', allTasks.length);
+      
+      // 扩展任务信息，添加进度信息
+      const enhancedTasks: EnhancedSaveTask[] = allTasks.map(task => {
+        // 为保存中的任务添加模拟进度信息
+        let progressStep;
+        let progressPercent;
         
-        // 扩展任务信息，添加进度信息
-        const enhancedTasks: EnhancedSaveTask[] = allTasks.map(task => {
-          // 为保存中的任务添加模拟进度信息
-          let progressStep;
-          let progressPercent;
-          
-          if (task.status === SaveTaskStatus.SAVING) {
-            // 根据时间计算一个模拟进度
-            const elapsedTime = Date.now() - task.scheduledAt;
-            if (elapsedTime < 1000) {
-              progressStep = "初始化";
-              progressPercent = 10;
-            } else if (elapsedTime < 2000) {
-              progressStep = "获取页面内容";
-              progressPercent = 30;
-            } else if (elapsedTime < 3000) {
-              progressStep = "解析页面";
-              progressPercent = 50;
-            } else if (elapsedTime < 4000) {
-              progressStep = "提取关键信息";
-              progressPercent = 70;
-            } else {
-              progressStep = "保存到数据库";
-              progressPercent = 90;
-            }
+        if (task.status === SaveTaskStatus.SAVING) {
+          // 根据时间计算一个模拟进度
+          const elapsedTime = Date.now() - task.scheduledAt;
+          if (elapsedTime < 1000) {
+            progressStep = "初始化";
+            progressPercent = 10;
+          } else if (elapsedTime < 2000) {
+            progressStep = "获取页面内容";
+            progressPercent = 30;
+          } else if (elapsedTime < 3000) {
+            progressStep = "解析页面";
+            progressPercent = 50;
+          } else if (elapsedTime < 4000) {
+            progressStep = "提取关键信息";
+            progressPercent = 70;
+          } else {
+            progressStep = "保存到数据库";
+            progressPercent = 90;
           }
-          
-          return {
-            ...task,
-            progressStep,
-            progressPercent
-          };
-        });
+        }
         
-        setTasks(enhancedTasks);
-      } catch (error) {
-        console.error('加载下载队列任务失败:', error);
-      }
-    };
+        return {
+          ...task,
+          progressStep,
+          progressPercent
+        };
+      });
+      
+      setTasks(enhancedTasks);
+    } catch (error) {
+      console.error('加载下载队列任务失败:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
+  // 初始加载和自动刷新
+  useEffect(() => {
     // 初始加载
     loadTasks();
 
@@ -117,7 +126,29 @@ const DownloadQueue: React.FC = () => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [refreshKey]);
+  }, [refreshKey, loadTasks]);
+  
+  // 自动刷新效果
+  useEffect(() => {
+    let intervalId: number;
+    
+    if (autoRefresh) {
+      intervalId = window.setInterval(() => {
+        setRefreshKey(prev => prev + 1);
+      }, 60000); // 每分钟刷新一次
+    }
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [autoRefresh]);
+
+  // 手动刷新
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+  };
 
   // 取消任务
   const handleCancelTask = async (tabId: number) => {
@@ -351,14 +382,31 @@ const DownloadQueue: React.FC = () => {
         title={<Title level={4}>下载队列</Title>}
         className="mb-4"
         extra={
-          <Button
-            type="primary"
-            icon={<ReloadOutlined />}
-            onClick={handleCheckAllTabs}
-            loading={checkingTabs}
-          >
-            检查所有标签页
-          </Button>
+          <Space>
+            <Tooltip title="刷新列表">
+              <Button
+                icon={<ReloadOutlined spin={isRefreshing} />}
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              />
+            </Tooltip>
+            <Tooltip title={autoRefresh ? "关闭自动刷新" : "开启自动刷新(每分钟)"}>
+              <Switch
+                checkedChildren="自动刷新"
+                unCheckedChildren="手动刷新"
+                checked={autoRefresh}
+                onChange={setAutoRefresh}
+              />
+            </Tooltip>
+            <Button
+              type="primary"
+              icon={<SyncOutlined />}
+              onClick={handleCheckAllTabs}
+              loading={checkingTabs}
+            >
+              检查所有标签页
+            </Button>
+          </Space>
         }
       >
         {/* 统计信息 */}
