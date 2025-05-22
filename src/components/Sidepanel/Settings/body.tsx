@@ -38,6 +38,8 @@ import { getTotalFilePerKB } from "@/services/app"
 import { SidepanelRag } from "@/components/Option/Settings/sidepanel-rag"
 import { SSTSettings } from "@/components/Option/Settings/sst-settings"
 import DataProviderSyncSettings from "@/components/Sidepanel/Settings/DataProviderSyncSettings"
+import { ModelSelection } from "@/components/Option/Settings/model-selection"
+import { ChatModeToggle } from "@/components/Option/Settings/chat-mode-toggle"
 
 export const SettingsBody = () => {
   const { t } = useTranslation("settings")
@@ -344,7 +346,30 @@ export const SettingsBody = () => {
         <h2 className="text-base mb-4 font-semibold leading-7 text-gray-900 dark:text-white">
           {t("generalSettings.title")}
         </h2>
-        <div className="flex flex-col  space-y-4">
+
+        <div className="flex flex-col space-y-4 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t("generalSettings.settings.chatOptions.label", "聊天选项")}
+          </h3>
+          
+          <div>
+            <div className="text-xs mb-2 dark:text-white">
+              {t("generalSettings.settings.modelSelection.label", "选择AI模型")}
+            </div>
+            
+            <ModelSelection />
+          </div>
+          
+          <div className="flex flex-col space-y-2">
+            <div className="text-xs mb-2 dark:text-white">
+              {t("generalSettings.settings.chatMode.label", "聊天模式")}
+            </div>
+            
+            <ChatModeToggle />
+          </div>
+        </div>
+        
+        <div className="flex flex-col space-y-4">
           <span className="text-gray-500   dark:text-neutral-50">
             {t("generalSettings.settings.copilotResumeLastChat.label")}
           </span>
