@@ -16,6 +16,7 @@ export interface AutoSaveSettings {
   paused: boolean; // 是否暂停自动保存（临时停止但保留设置）
   scanInterval: number; // 扫描间隔时间（分钟）
   enablePeriodicScan: boolean; // 是否启用定期扫描
+  enableDelayedSave: boolean; // 是否启用延迟保存
 }
 
 // 网站规则类型定义
@@ -39,11 +40,12 @@ const DEFAULT_SETTINGS: AutoSaveSettings = {
   websites: [
     { id: generateID(), pattern: '*', enabled: true }
   ],
-  saveDelay: 0.1, // 将延迟保存设为0.1分钟（几乎立即保存）
+  saveDelay: 1, // 默认延迟1分钟
   maxPages: 100, // 默认最大保存100个页面
   paused: false, // 默认不暂停
   scanInterval: 30, // 默认扫描间隔30分钟
-  enablePeriodicScan: true // 默认启用定期扫描
+  enablePeriodicScan: true, // 默认启用定期扫描
+  enableDelayedSave: true, // 默认启用延迟保存
 };
 
 // 存储键名
@@ -383,7 +385,9 @@ const AutoSaveSettings: React.FC = () => {
             message="自动保存模式说明"
             description={
               <div>
-                <p><strong>定期扫描：</strong>系统会按照设定的时间间隔主动扫描您当前打开的所有标签页，根据规则自动保存符合条件的页面。此设置适用于您希望定期捕获网页内容的场景。</p>
+                <p><strong>定期扫描：</strong>系统会按照设定的时间间隔主动扫描您当前打开的所有标签页，根据规则自动保存符合条件的页面。适用于您希望定期捕获网页内容的场景。</p>
+                <p><strong>延迟保存：</strong>当您浏览新网页且页面加载完成后，系统会等待指定的延迟时间再自动保存页面。适用于您想在浏览后自动保存的场景。</p>
+                <p><strong>您可以选择启用其中一种或同时启用两种模式</strong>，以获得最佳的自动保存体验。</p>
               </div>
             }
           />
@@ -418,20 +422,35 @@ const AutoSaveSettings: React.FC = () => {
         )}
 
         <Form.Item
-          style={{ display: 'none' }} // 隐藏此选项
-          label="保存延迟时间"
-          tooltip="网页加载完成后，等待多少分钟后自动保存"
+          label="启用延迟保存"
+          tooltip="启用后，系统将根据设置的延迟时间自动保存网页"
         >
-          <InputNumber
-            min={0.1}
-            max={60}
-            step={0.5}
-            value={settings.saveDelay}
-            onChange={handleSaveDelayChange}
-            addonAfter="分钟"
+          <Switch
+            checked={settings.enableDelayedSave}
+            onChange={(checked) => {
+              const newSettings = { ...settings, enableDelayedSave: checked };
+              saveSettings(newSettings);
+            }}
             disabled={!settings.enabled}
           />
         </Form.Item>
+
+        {settings.enableDelayedSave && (
+          <Form.Item
+            label="保存延迟时间"
+            tooltip="网页加载完成后，等待多少分钟后自动保存，设为0.1分钟表示几乎立即保存"
+          >
+            <InputNumber
+              min={0.1}
+              max={60}
+              step={0.5}
+              value={settings.saveDelay}
+              onChange={handleSaveDelayChange}
+              addonAfter="分钟"
+              disabled={!settings.enabled}
+            />
+          </Form.Item>
+        )}
 
         <Form.Item
           label="最大保存页面数量"

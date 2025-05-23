@@ -24,6 +24,7 @@ export interface AutoSaveSettings {
   paused: boolean; // 是否暂停自动保存（临时停止但保留设置）
   scanInterval: number; // 定期扫描间隔（单位：分钟）
   enablePeriodicScan: boolean; // 是否启用定期扫描
+  enableDelayedSave: boolean; // 是否启用延迟保存
 }
 
 // 保存任务来源枚举
@@ -675,6 +676,12 @@ export const setupAutoSaveTask = async (
       return;
     }
 
+    // 检查是否启用了延迟保存功能
+    if (!settings.enableDelayedSave) {
+      logger.debug(`标签页 ${tabId} 的延迟保存功能未启用，跳过`);
+      return;
+    }
+
     // 检查URL是否是扩展或浏览器内部页面
     if (url.startsWith('chrome://') || 
         url.startsWith('chrome-extension://') || 
@@ -1306,10 +1313,16 @@ export const initAutoSave = (): void => {
   });
 
   // 监听标签页更新事件
-  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    // 当页面加载完成时设置自动保存任务
+  browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    // 当页面加载完成时可能设置自动保存任务
     if (changeInfo.status === 'complete' && tab.url) {
-      setupAutoSaveTask(tabId);
+      // 获取最新设置
+      const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+      
+      // 只有当延迟保存功能启用时才设置自动保存任务
+      if (settings?.enabled && !settings.paused && settings.enableDelayedSave) {
+        setupAutoSaveTask(tabId);
+      }
 
       // 更新心跳时间
       lastHeartbeat = Date.now();
