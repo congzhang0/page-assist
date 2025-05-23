@@ -3,6 +3,7 @@
  * 提供保存当前页面到数据库的功能
  */
 
+// 注意：截图功能已被禁用，但保留相关导入以避免破坏依赖关系
 import { getDataFromCurrentTab, getDataFromSpecificTab } from "@/libs/get-html";
 import { getScreenshotFromCurrentTab, getScreenshotFromSpecificTab } from "@/libs/get-screenshot";
 import { savedPagesDB } from "@/db/savedpages";
@@ -11,14 +12,7 @@ import { generateSummary } from "@/services/llm-service";
 import { browser } from "wxt/browser";
 import { TaskSource } from "./auto-save";
 import { isUrlAlreadySaved } from "./auto-save"; // 导入从auto-save.ts的函数
-
-/**
- * 保存当前页面到数据库
- * @param params 保存参数
- * @returns 保存的页面信息
- */
 import logger from '@/utils/logger';
-
 import { setBadgeText, setBadgeBackgroundColor, setBadgeTextColor, setTitle } from "@/utils/action";
 import statusIndicator from "@/utils/status-indicator";
 
@@ -144,76 +138,20 @@ export const saveCurrentPage = async (params?: {
     }
 
     // 获取页面截图
-     logger.debug('正在获取页面截图', params?.tabId ? { tabId: params.tabId } : {});
-     updateSaveStatus("2/3", "#3498db", "第2步", "正在获取页面截图..."); // 第二阶段：获取截图
-
-    let screenshotResult;
-    if (params?.tabId) {
-      // 如果提供了 tabId，使用 getScreenshotFromSpecificTab
-      screenshotResult = await getScreenshotFromSpecificTab(params.tabId).catch(err => {
-        // 检查是否是配额限制错误
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
-
-        if (isQuotaError) {
-          logger.warn('截图请求超过配额限制，已加入队列处理', { tabId: params.tabId, error: errorMessage });
-          updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
-
-          // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
-          return {
-            success: false,
-            screenshot: undefined,
-            error: errorMessage,
-            isQuotaError: true
-          };
-        } else {
-          logger.error('获取页面截图失败', { tabId: params.tabId, error: err });
-          // 其他截图失败不阻止保存过程，继续执行
-          return { success: false, screenshot: undefined, error: errorMessage };
-        }
-      });
-    } else {
-      // 否则使用原来的 getScreenshotFromCurrentTab
-      screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
-        // 检查是否是配额限制错误
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
-
-        if (isQuotaError) {
-          logger.warn('截图请求超过配额限制，已加入队列处理', { error: errorMessage });
-          updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
-
-          // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
-          return {
-            success: false,
-            screenshot: undefined,
-            error: errorMessage,
-            isQuotaError: true
-          };
-        } else {
-          logger.error('获取页面截图失败', err);
-          // 其他截图失败不阻止保存过程，继续执行
-          return { success: false, screenshot: undefined, error: errorMessage };
-        }
-      });
-    }
-
-    const { success, screenshot, error: screenshotError, isQuotaError } = screenshotResult;
-
-    if (!success) {
-      if (isQuotaError) {
-        logger.warn('截图请求已加入队列，但当前保存操作将继续进行', { error: screenshotError });
-        // 对于配额错误，我们显示一个友好的消息
-        statusIndicator.showNotification(
-          "截图请求已加入队列",
-          "由于浏览器限制，截图请求已加入队列。页面将保存，但可能不包含截图。"
-        );
-      } else {
-        logger.warn('获取页面截图失败，将继续保存页面', screenshotError);
-      }
-    } else {
-      logger.info('成功获取页面截图', { screenshotLength: screenshot?.length });
-    }
+     logger.debug('跳过获取页面截图功能');
+     updateSaveStatus("2/3", "#3498db", "第2步", "跳过截图步骤..."); // 第二阶段：跳过截图
+    
+    // 创建一个空的截图结果，不进行实际的截图操作
+    const screenshotResult = {
+      success: false,
+      screenshot: undefined,
+      error: "截图功能已禁用",
+      isQuotaError: false
+    };
+    
+    const { success, screenshot, error: screenshotError } = screenshotResult;
+    
+    logger.info('截图功能已禁用，跳过截图步骤');
 
     // 使用LLM生成摘要、关键词和评分
     logger.debug('正在使用LLM生成摘要和关键词');
@@ -433,8 +371,7 @@ export const importSavedPages = async (pages: SavedPage[]): Promise<number> => {
         notes: page.notes,
         summary: page.summary,
         rating: page.rating,
-        favicon: page.favicon,
-        screenshot: page.screenshot
+        favicon: page.favicon
       });
 
       importedCount++;
