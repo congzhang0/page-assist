@@ -10,10 +10,21 @@ import { getAllSavedPages } from "./saved-pages";
 import logger from '@/utils/logger';
 import { WebsiteRule } from "@/components/Option/SavedPages/AutoSaveSettings";
 import type { SavedPage } from "@/db/savedpages";  // 导入SavedPage类型
+import { optimizeContent } from '@/utils/content-optimizer';
+import { cleanupStaleTasks, pruneTaskHistory } from '@/utils/task-cleanup';
 
 // 存储键名
 const STORAGE_KEY = 'auto_save_settings';
 const TASKS_STORAGE_KEY = 'auto_save_tasks';
+
+// 配置常量
+const MAX_CONCURRENT_SAVES = 3;
+const SAVE_TIMEOUT_MS = 3 * 60 * 1000; // 3分钟超时
+const PERSISTENCE_BATCH_INTERVAL = 1000; // 任务持久化批处理间隔
+const TASK_CLEANUP_INTERVAL = 10 * 60 * 1000; // 任务清理间隔 (10分钟)
+const MAX_PAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_CONTENT_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_RETRY = 2; // 最大重试次数
 
 // 自动保存设置的类型定义
 export interface AutoSaveSettings {
@@ -105,6 +116,14 @@ let heartbeatIntervalId: ReturnType<typeof setInterval> | undefined;
 // 定期扫描
 let scanIntervalId: ReturnType<typeof setInterval> | null = null;
 let lastScanTime = Date.now();
+
+// 注意: 配置常量已在文件顶部定义，此处删除重复声明
+
+// 记录活动的保存操作
+let activeSaveOperations = 0;
+let pendingSaves: { tabId: number, timeoutId?: NodeJS.Timeout }[] = [];
+let persistenceTimer: NodeJS.Timeout | null = null;
+let needsPersistence = false;
 
 /**
  * 检查URL是否匹配规则
@@ -382,7 +401,65 @@ export const isMaxPageLimitReached = async (settings?: AutoSaveSettings): Promis
  * @returns 保存的页面或void
  */
 export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => {
+  // 检查当前并发保存数是否达到限制
+  if (activeSaveOperations >= MAX_CONCURRENT_SAVES) {
+    // 如果达到限制，将任务添加到队列中等待处理
+    logger.info(`当前并发保存数已达到上限(${MAX_CONCURRENT_SAVES})，标签页 ${tabId} 将被加入队列等待处理`);
+    
+    // 添加到等待队列并设置超时
+    const timeoutId = setTimeout(() => {
+      // 查找并移除已超时的任务
+      const index = pendingSaves.findIndex(item => item.tabId === tabId);
+      if (index !== -1) {
+        pendingSaves.splice(index, 1);
+        
+        // 更新任务状态为失败
+        const task = saveTasks.get(tabId);
+        if (task) {
+          task.status = SaveTaskStatus.FAILED;
+          task.error = '保存操作超时';
+          task.steps?.push({
+            step: '保存页面',
+            timestamp: Date.now(),
+            status: 'failed',
+            message: '保存操作超时（等待队列中超过3分钟）'
+          });
+          saveTasks.set(tabId, task);
+          schedulePersistTasks();
+          
+          logger.error(`等待队列中的保存任务超时: 标签页 ${tabId}`);
+        }
+      }
+    }, SAVE_TIMEOUT_MS);
+    
+    pendingSaves.push({ tabId, timeoutId });
+    return;
+  }
+  
+  activeSaveOperations++;
+  let saveTimeoutId: NodeJS.Timeout | null = null;
+  
   try {
+    // 设置保存操作超时
+    saveTimeoutId = setTimeout(() => {
+      // 更新任务状态为失败
+      const timeoutTask = saveTasks.get(tabId);
+      if (timeoutTask && timeoutTask.status === SaveTaskStatus.SAVING) {
+        timeoutTask.status = SaveTaskStatus.FAILED;
+        timeoutTask.error = '保存操作超时（执行超过3分钟）';
+        timeoutTask.steps?.push({
+          step: '保存页面',
+          timestamp: Date.now(),
+          status: 'failed',
+          message: '保存操作执行超时（超过3分钟）'
+        });
+        saveTasks.set(tabId, timeoutTask);
+        schedulePersistTasks();
+        
+        logger.error(`保存任务执行超时: 标签页 ${tabId}`);
+      }
+    }, SAVE_TIMEOUT_MS);
+  
     // 获取任务信息，如果存在则更新状态
     const task = saveTasks.get(tabId);
     if (task) {
@@ -398,7 +475,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: '开始保存页面'
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
       
       // 添加控制台日志
       console.log(`开始保存页面: ${task.title || task.url}, 标签ID: ${tabId}`);
@@ -423,7 +500,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
           message: '无法保存浏览器内部页面'
         });
         saveTasks.set(tabId, task);
-        await persistTasks();
+        schedulePersistTasks();
       }
       
       return;
@@ -444,7 +521,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
           message: 'URL已经保存过，跳过重复保存'
         });
         saveTasks.set(tabId, task);
-        await persistTasks();
+        schedulePersistTasks();
         
         // 添加控制台日志
         console.log(`URL已存在，自动跳过: ${url}`);
@@ -485,7 +562,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
           message: '自动保存功能未启用'
         });
         saveTasks.set(tabId, task);
-        await persistTasks();
+        schedulePersistTasks();
       }
       
       return;
@@ -505,7 +582,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
           message: '自动保存功能已暂停'
         });
         saveTasks.set(tabId, task);
-        await persistTasks();
+        schedulePersistTasks();
       }
       
       return;
@@ -520,7 +597,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: '自动保存功能已启用'
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
     }
 
     // 检查URL是否匹配规则
@@ -540,7 +617,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
           message: 'URL不符合自动保存规则'
         });
         saveTasks.set(tabId, task);
-        await persistTasks();
+        schedulePersistTasks();
       }
       
       return;
@@ -555,7 +632,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: 'URL符合自动保存规则'
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
     }
 
     // 检查是否已达到最大页面数量限制
@@ -574,7 +651,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
           message: `已达到最大保存页面数量限制(${settings?.maxPages}页)`
         });
         saveTasks.set(tabId, task);
-        await persistTasks();
+        schedulePersistTasks();
       }
       
       return;
@@ -589,7 +666,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: '未达到最大保存页面数量限制'
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
     }
 
     // 记录步骤：开始保存页面
@@ -601,7 +678,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: '正在保存页面内容'
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
     }
 
     // 自动保存页面，添加auto-save标签和来源信息
@@ -611,7 +688,9 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
       title: title, // 确保保存标题
       tabId: tabId,  // 传递标签页ID，确保能够获取正确的页面内容
       source: task?.source || TaskSource.AUTO_RULE,
-      sourceInfo: task?.sourceInfo
+      sourceInfo: task?.sourceInfo,
+      // 不使用内部重试机制，因为自动保存有自己的异常处理流程
+      retryCount: MAX_RETRY // 设置为最大重试次数，禁止saveCurrentPage内部重试
     });
 
     logger.info('自动保存页面成功:', url);
@@ -626,7 +705,7 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: '页面保存成功'
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
       
       // 添加控制台日志
       console.log(`页面保存成功: ${savedPage.title}, URL: ${savedPage.url}`);
@@ -648,13 +727,22 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         message: error instanceof Error ? error.message : String(error)
       });
       saveTasks.set(tabId, task);
-      await persistTasks();
+      schedulePersistTasks();
       
       // 添加控制台日志
       console.log(`页面保存失败: ${task.title || task.url}, 错误: ${task.error}`);
     }
     
     throw error;
+  } finally {
+    // 清除超时定时器
+    if (saveTimeoutId) {
+      clearTimeout(saveTimeoutId);
+    }
+    
+    // 减少活动保存计数并处理下一个等待的任务
+    activeSaveOperations--;
+    processNextPendingSave();
   }
 };
 
@@ -858,7 +946,7 @@ export const setupAutoSaveTask = async (
     };
 
     saveTasks.set(tabId, task);
-    await persistTasks();
+    schedulePersistTasks();
 
     logger.info(`设置了自动保存任务: ${title} (${url}), 将在 ${delayMinutes} 分钟后保存`);
   } catch (error) {
@@ -943,6 +1031,76 @@ export const clearAutoSaveTask = async (tabId: number): Promise<void> => {
     } catch (error) {
       logger.error(`从持久化存储中删除标签页 ${tabId} 的自动保存任务失败:`, error);
     }
+  }
+};
+
+/**
+ * 清除所有自动保存任务
+ * @param sourceFilter 可选的来源过滤器，用于只清除特定来源的任务
+ * @returns 清除的任务数量
+ */
+export const clearAllAutoSaveTasks = async (sourceFilter?: TaskSource): Promise<number> => {
+  try {
+    let clearedCount = 0;
+    
+    // 清除内存中的任务
+    const tasksToRemove: number[] = [];
+    
+    for (const [tabId, task] of saveTasks.entries()) {
+      // 如果指定了来源过滤器，只清除匹配的任务
+      if (sourceFilter && task.source !== sourceFilter) {
+        continue;
+      }
+      
+      // 检查timeoutId类型并安全地清除定时器
+      if (typeof task.timeoutId === 'number' && task.timeoutId > 0) {
+        clearTimeout(task.timeoutId as number);
+      } else if (task.timeoutId) {
+        // 尝试清除其他类型的定时器
+        try {
+          clearTimeout(task.timeoutId as NodeJS.Timeout);
+        } catch (e) {
+          logger.error(`清除定时器失败: ${e}`);
+        }
+      }
+      
+      tasksToRemove.push(tabId);
+    }
+    
+    // 从内存中移除任务
+    for (const tabId of tasksToRemove) {
+      saveTasks.delete(tabId);
+      clearedCount++;
+    }
+    
+    // 从持久化存储中清除任务
+    try {
+      const persistentData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY);
+      if (persistentData && persistentData.tasks) {
+        const originalCount = persistentData.tasks.length;
+        
+        // 根据来源过滤任务
+        if (sourceFilter) {
+          persistentData.tasks = persistentData.tasks.filter(task => task.source !== sourceFilter);
+        } else {
+          persistentData.tasks = []; // 清空所有任务
+        }
+        
+        persistentData.lastUpdated = Date.now();
+        await storage.set(TASKS_STORAGE_KEY, persistentData);
+        
+        // 计算从持久化存储中清除的任务数量
+        clearedCount = Math.max(clearedCount, originalCount - persistentData.tasks.length);
+      }
+    } catch (error) {
+      logger.error('从持久化存储中清除任务失败:', error);
+    }
+    
+    logger.info(`已清除 ${clearedCount} 个任务${sourceFilter ? ` (来源: ${sourceFilter})` : ''}`);
+    return clearedCount;
+  } catch (error) {
+    logger.error('清除所有自动保存任务失败:', error);
+    return 0;
   }
 };
 
@@ -1341,6 +1499,9 @@ export const initAutoSave = (): void => {
     startPeriodicScan(settings);
   });
 
+  // 启动定期任务清理
+  startTaskCleanup();
+
   // 监听标签页更新事件
   browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     // 当页面加载完成时可能设置自动保存任务
@@ -1405,26 +1566,21 @@ export const initAutoSave = (): void => {
         for (const tab of tabs) {
           if (tab.id) await setupAutoSaveTask(tab.id);
         }
-      }
-
-      // 如果设置从启用变为禁用，或从未暂停变为暂停，清除所有自动保存任务
+      }      // 如果设置从启用变为禁用，或从未暂停变为暂停，清除所有自动保存任务
       if ((oldSettings?.enabled && (!newSettings || !newSettings.enabled)) ||
           (oldSettings?.enabled && !oldSettings.paused && newSettings?.enabled && newSettings.paused)) {
 
-        const taskCount = saveTasks.size;
-        logger.info(`清除所有自动保存任务，共 ${taskCount} 个任务`);
-
-        for (const task of Array.from(saveTasks.values())) {
-          await clearAutoSaveTask(task.tabId);
-        }
+        // 使用新的函数清除所有自动保存任务，并清除来源为AUTO_RULE的任务
+        const clearedCount = await clearAllAutoSaveTasks(TaskSource.AUTO_RULE);
+        logger.info(`清除了 ${clearedCount} 个自动规则保存任务`);
         
         // 停止定期扫描
         stopPeriodicScan();
-
+        
         if (newSettings?.paused) {
-          logger.info('自动保存功能已暂停，所有保存任务已清除');
+          logger.info('自动保存功能已暂停，所有自动规则保存任务已清除');
         } else {
-          logger.info('自动保存功能已禁用，所有保存任务已清除');
+          logger.info('自动保存功能已禁用，所有自动规则保存任务已清除');
         }
       }
     }
@@ -1734,4 +1890,140 @@ export const manualScanAllTabs = async (): Promise<{
   
   // 执行扫描
   return await scanAllTabs();
+};
+
+/**
+ * Batch persistence operations to reduce database writes
+ * Only persists tasks when necessary and within the defined interval
+ */
+const schedulePersistTasks = async (): Promise<void> => {
+  // Mark that we need to persist tasks
+  needsPersistence = true;
+  
+  // If there's already a timer running, don't start another one
+  if (persistenceTimer) return;
+  
+  // Schedule persistence operation
+  persistenceTimer = setTimeout(async () => {
+    if (needsPersistence) {
+      try {
+        await persistTasks();
+        needsPersistence = false;
+      } catch (error) {
+        logger.error('批量保存任务状态失败:', error);
+      }
+    }
+    persistenceTimer = null;
+    
+    // If changes occurred during persistence, schedule another one
+    if (needsPersistence) {
+      schedulePersistTasks();
+    }
+  }, PERSISTENCE_BATCH_INTERVAL);
+};
+
+/**
+ * Process the next save operation in the queue if concurrency allows
+ */
+const processNextPendingSave = (): void => {
+  // If we're at max concurrency or no pending saves, do nothing
+  if (activeSaveOperations >= MAX_CONCURRENT_SAVES || pendingSaves.length === 0) {
+    return;
+  }
+  
+  // Get the next pending save and remove it from the queue
+  const nextSave = pendingSaves.shift();
+  if (!nextSave) return;
+  
+  // Clear any existing timeout for this tab
+  if (nextSave.timeoutId) {
+    clearTimeout(nextSave.timeoutId);
+  }
+  
+  // Process the save operation
+  activeSaveOperations++;
+  autoSavePage(nextSave.tabId).finally(() => {
+    activeSaveOperations--;
+    // Try to process the next save
+    processNextPendingSave();
+  });
+};
+
+/**
+ * 清理陈旧的任务
+ * @returns 清理的任务数量
+ */
+export const cleanupTasks = async (): Promise<number> => {
+  try {
+    logger.debug('开始清理陈旧的任务');
+
+    // 获取当前所有任务
+    const allTasks = Array.from(saveTasks.values());
+    const now = Date.now();
+    
+    // 处理陈旧任务
+    const updatedTasks = cleanupStaleTasks(allTasks, now);
+    
+    // 更新任务列表
+    let cleanedCount = 0;
+    updatedTasks.forEach(task => {
+      if (task.status === SaveTaskStatus.FAILED && task.error?.includes('Task timed out')) {
+        cleanedCount++;
+      }
+      saveTasks.set(task.tabId, task);
+    });
+    
+    // 触发持久化以保存更改
+    if (cleanedCount > 0) {
+      await persistTasks();
+    }
+    
+    // 清理持久化存储中的历史任务
+    const persistentData = await storage.get<PersistentSaveTasks>(TASKS_STORAGE_KEY);
+    if (persistentData && persistentData.tasks) {
+      // 应用剪裁以减少历史任务数量
+      const originalTaskCount = persistentData.tasks.length;
+      persistentData.tasks = pruneTaskHistory(persistentData.tasks);
+      
+      // 如果任务数量减少，则更新存储
+      if (persistentData.tasks.length < originalTaskCount) {
+        persistentData.lastUpdated = now;
+        await storage.set(TASKS_STORAGE_KEY, persistentData);
+        cleanedCount += (originalTaskCount - persistentData.tasks.length);
+      }
+    }
+    
+    // 记录清理结果
+    if (cleanedCount > 0) {
+      logger.info(`清理了 ${cleanedCount} 个陈旧任务`);
+    } else {
+      logger.debug('没有发现需要清理的陈旧任务');
+    }
+    
+    return cleanedCount;
+  } catch (error) {
+    logger.error('清理陈旧任务失败:', error);
+    return 0;
+  }
+};
+
+/**
+ * 启动定期任务清理
+ */
+const startTaskCleanup = (): void => {
+  // 先执行一次清理
+  cleanupTasks().then(cleanedCount => {
+    logger.info(`初始任务清理完成，清理了 ${cleanedCount} 个陈旧任务`);
+  });
+  
+  // 设置定期清理
+  setInterval(async () => {
+    logger.debug('执行定期任务清理');
+    const cleanedCount = await cleanupTasks();
+    if (cleanedCount > 0) {
+      logger.info(`定期任务清理完成，清理了 ${cleanedCount} 个陈旧任务`);
+    }
+  }, TASK_CLEANUP_INTERVAL);
+  
+  logger.debug('已启动定期任务清理机制');
 };
