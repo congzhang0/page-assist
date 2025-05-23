@@ -71,6 +71,14 @@ const DownloadQueue: React.FC = () => {
       const allTasks = await getAllSaveTasks();
       console.log('下载队列任务数量:', allTasks.length);
       
+      // 输出更详细的任务信息，包括URL和标题
+      if (allTasks.length > 0) {
+        console.log('下载队列任务详情:');
+        allTasks.forEach(task => {
+          console.log(`- ${task.title || '无标题'}, URL: ${task.url}, 状态: ${task.status}, 来源: ${task.source || '未知'}`);
+        });
+      }
+      
       // 扩展任务信息，添加进度信息
       const enhancedTasks: EnhancedSaveTask[] = allTasks.map(task => {
         // 为保存中的任务添加模拟进度信息

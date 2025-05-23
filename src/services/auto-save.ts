@@ -333,7 +333,17 @@ export const shouldAutoSaveUrl = async (url: string, settings?: AutoSaveSettings
 export const isUrlAlreadySaved = async (url: string): Promise<boolean> => {
   try {
     const savedPages = await getAllSavedPages({ searchText: url });
-    return savedPages.some(page => page.url === url);
+    const isAlreadySaved = savedPages.some(page => page.url === url);
+    
+    // 添加详细日志
+    if (isAlreadySaved) {
+      logger.debug(`URL已经被保存过，跳过自动保存: ${url}`);
+      console.log(`URL已存在: ${url}`);
+    } else {
+      logger.debug(`URL尚未被保存: ${url}`);
+    }
+    
+    return isAlreadySaved;
   } catch (error) {
     logger.error('检查URL是否已保存时出错:', error);
     return false;
@@ -389,6 +399,9 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
       });
       saveTasks.set(tabId, task);
       await persistTasks();
+      
+      // 添加控制台日志
+      console.log(`开始保存页面: ${task.title || task.url}, 标签ID: ${tabId}`);
     }
 
     // 获取标签页信息
@@ -432,6 +445,9 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
         });
         saveTasks.set(tabId, task);
         await persistTasks();
+        
+        // 添加控制台日志
+        console.log(`URL已存在，自动跳过: ${url}`);
       }
       
       // 获取现有页面并返回
@@ -611,6 +627,9 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
       });
       saveTasks.set(tabId, task);
       await persistTasks();
+      
+      // 添加控制台日志
+      console.log(`页面保存成功: ${savedPage.title}, URL: ${savedPage.url}`);
     }
 
     return savedPage;
@@ -630,6 +649,9 @@ export const autoSavePage = async (tabId: number): Promise<SavedPage | void> => 
       });
       saveTasks.set(tabId, task);
       await persistTasks();
+      
+      // 添加控制台日志
+      console.log(`页面保存失败: ${task.title || task.url}, 错误: ${task.error}`);
     }
     
     throw error;
@@ -669,6 +691,9 @@ export const setupAutoSaveTask = async (
       source,
       sourceInfo
     });
+
+    // 添加简洁的控制台日志输出
+    console.log(`设置保存任务: ${title || url}, 来源: ${source}, 标签ID: ${tabId}`);
 
     // 如果URL为空，直接返回
     if (!url) {
@@ -875,7 +900,9 @@ const recordFilteredUrl = async (
     saveTasks.set(tabId, virtualTask);
     await persistTasks();
 
-    logger.debug(`记录了被过滤的URL: ${title} (${url}), 原因: ${reason}`);
+    // 添加详细的控制台日志
+    logger.debug(`记录了被过滤的URL: ${title} (${url}), 原因: ${reason}, 来源: ${source}`);
+    console.log(`页面被过滤: ${title || url}, 原因: ${reason}, 来源: ${source}`);
   } catch (error) {
     logger.error(`记录被过滤的URL失败:`, error);
   }
@@ -1095,6 +1122,7 @@ export const saveAllOpenTabs = async (): Promise<{
     let skippedCount = 0;
     
     logger.info(`准备保存所有打开的标签页，共 ${tabs.length} 个`);
+    console.log(`开始处理保存所有打开标签页的请求，共 ${tabs.length} 个标签页`);
     
     // 处理每个标签页
     for (const tab of tabs) {
@@ -1112,6 +1140,7 @@ export const saveAllOpenTabs = async (): Promise<{
           tab.url.startsWith('firefox:') ||
           tab.url.startsWith('brave:')) {
         logger.debug(`跳过浏览器内部页面: ${tab.url}`);
+        console.log(`跳过浏览器内部页面: ${tab.title || tab.url}`);
         skippedCount++;
         continue;
       }
