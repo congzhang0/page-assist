@@ -15,6 +15,7 @@ import { isUrlAlreadySaved } from "./auto-save"; // 导入从auto-save.ts的函�
 import logger from '@/utils/logger';
 import { setBadgeText, setBadgeBackgroundColor, setBadgeTextColor, setTitle } from "@/utils/action";
 import statusIndicator from "@/utils/status-indicator";
+import { downloadWebpage } from "@/utils/page-downloader"; // 导入页面下载器
 
 /**
  * 更新扩展图标状态，显示保存进度
@@ -76,8 +77,13 @@ export const saveCurrentPage = async (params?: {
   tabId?: number; // 可选的标签页ID，用于自动保存时指定标签页
   source?: TaskSource; // 保存来源
   sourceInfo?: string; // 来源详细信息
+  retryCount?: number; // 重试次数，用于内部递归调用
 }): Promise<SavedPage> => {
-  logger.info('开始保存当前页面', params);
+  // 获取重试计数，默认为0（首次尝试）
+  const currentRetry = params?.retryCount || 0;
+  const MAX_RETRY = 2; // 最大重试次数
+  
+  logger.info('开始保存当前页面', {...params, retry: currentRetry > 0 ? `第${currentRetry}次重试` : '首次尝试'});
 
   // 显示开始保存状态
    updateSaveStatus("...", "#3498db", "准备中", "正在初始化保存过程..."); // 蓝色表示进行中
@@ -110,8 +116,57 @@ export const saveCurrentPage = async (params?: {
         throw new Error('获取页面内容返回空结果');
     }
 
-    const { url, title, content, type, pdf, favicon } = pageDataResult;
-    logger.info('成功获取页面内容', { url, title, contentLength: content?.length, type });
+    let { url, title, content, type, pdf, favicon } = pageDataResult;
+    
+    // 使用新的页面下载功能优化内容
+    logger.info('正在优化页面内容', { url, contentLength: content?.length });
+    updateSaveStatus("2/3", "#3498db", "第2步", "正在优化页面内容..."); 
+
+    try {
+      // 尝试优化页面内容
+      const downloadResult = await downloadWebpage(url, {
+        mode: 'optimized',
+        removeScripts: true,
+        removeStyles: true,
+        removeComments: true,
+        removeFrames: true,
+        saveAs: false // 不显示保存对话框，直接处理内容
+      });
+
+      // 如果下载和优化成功，更新content和pdf
+      if (downloadResult.success && downloadResult.html) {
+        // Use the optimized HTML for both content and pdf
+        content = downloadResult.html;
+        pdf = downloadResult.html;
+
+        logger.info('成功优化页面内容', { 
+          url,
+          originalSize: downloadResult.originalSize,
+          optimizedSize: downloadResult.optimizedSize
+        });
+      } else {
+        logger.warn('页面优化未成功，将使用原始内容', { 
+          error: downloadResult.error,
+          originalSize: content?.length
+        });
+      }
+
+    } catch (error) {
+      logger.warn('使用优化模式下载页面失败，将使用原始内容', error);
+      // 继续使用原始内容
+    }
+
+    // 检查内容
+    if (!content || content.length === 0) {
+      throw new Error('页面内容为空，无法保存');
+    }
+    
+    logger.info('成功获取页面内容', { 
+      url, 
+      title, 
+      contentLength: content?.length, 
+      type
+    });
 
     // 检查URL是否已经保存过
     const isExist = await isUrlAlreadySaved(url);
@@ -229,9 +284,27 @@ export const saveCurrentPage = async (params?: {
 
     return savedPage;
   } catch (error) {
-    // 更新状态为保存失败
+    // 如果有重试次数，则尝试重试
+    if (currentRetry < MAX_RETRY) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(`保存页面失败，准备重试 (${currentRetry + 1}/${MAX_RETRY})`, { error: errorMessage });
+      
+      // 更新状态为重试
+      updateSaveStatus("...", "#f39c12", "重试中", `尝试重新保存页面 (${currentRetry + 1}/${MAX_RETRY})`);
+      
+      // 短暂延迟后重试
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 递归调用自身进行重试，增加重试计数
+      return saveCurrentPage({
+        ...params,
+        retryCount: currentRetry + 1
+      });
+    }
+    
+    // 已达到最大重试次数，记录最终错误
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('保存页面失败', { error: errorMessage });
+    logger.error('保存页面失败，已达最大重试次数', { error: errorMessage, maxRetry: MAX_RETRY });
     updateSaveStatus("✗", "#e74c3c", "错误", `保存页面失败: ${errorMessage}`); // 红色表示失败
 
     // 显示错误通知

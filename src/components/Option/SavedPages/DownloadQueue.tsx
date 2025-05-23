@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input, Modal, Timeline, Switch } from 'antd';
+import { Card, List, Tag, Typography, Button, Tooltip, Empty, Progress, Space, Statistic, Collapse, Tabs, Select, DatePicker, Badge, Table, Input, Modal, Timeline, Switch, Popconfirm } from 'antd';
 import {
   ClockCircleOutlined,
   LoadingOutlined,
@@ -16,7 +16,7 @@ import {
   CalendarOutlined,
   SyncOutlined
 } from '@ant-design/icons';
-import { getAllSaveTasks, clearAutoSaveTask, SaveTaskStatus, manualCheckAllTabs, TaskSource } from '@/services/auto-save';
+import { getAllSaveTasks, clearAutoSaveTask, SaveTaskStatus, manualCheckAllTabs, TaskSource, clearAllAutoSaveTasks } from '@/services/auto-save';
 import type { SaveTask, SaveTaskStep } from '@/services/auto-save';
 import { useTranslation } from "react-i18next";
 import dayjs from 'dayjs';
@@ -69,14 +69,21 @@ const DownloadQueue: React.FC = () => {
     try {
       setIsRefreshing(true);
       const allTasks = await getAllSaveTasks();
-      console.log('下载队列任务数量:', allTasks.length);
       
-      // 输出更详细的任务信息，包括URL和标题
-      if (allTasks.length > 0) {
+      // 只在任务数量变化时才输出详细日志
+      const taskCountChanged = allTasks.length !== tasks.length;
+      if (taskCountChanged) {
+        console.log('下载队列任务数量:', allTasks.length);
+      }
+      
+      // 仅在开发环境或任务数量变化时输出详细日志
+      if (process.env.NODE_ENV === 'development' && taskCountChanged && allTasks.length > 0) {
         console.log('下载队列任务详情:');
-        allTasks.forEach(task => {
-          console.log(`- ${task.title || '无标题'}, URL: ${task.url}, 状态: ${task.status}, 来源: ${task.source || '未知'}`);
-        });
+        console.log(`等待中: ${allTasks.filter(t => t.status === SaveTaskStatus.WAITING && t.timeoutId !== -1).length}, ` +
+                    `保存中: ${allTasks.filter(t => t.status === SaveTaskStatus.SAVING).length}, ` +
+                    `已完成: ${allTasks.filter(t => t.status === SaveTaskStatus.COMPLETED).length}, ` +
+                    `失败: ${allTasks.filter(t => t.status === SaveTaskStatus.FAILED).length}, ` +
+                    `被过滤: ${allTasks.filter(t => t.timeoutId === -1).length}`);
       }
       
       // 扩展任务信息，添加进度信息
@@ -129,7 +136,7 @@ const DownloadQueue: React.FC = () => {
     // 设置定时刷新
     const intervalId = setInterval(() => {
       loadTasks();
-    }, 1000); // 每秒刷新一次
+    }, 60*1000); // 每60秒刷新一次
 
     return () => {
       clearInterval(intervalId);
@@ -384,6 +391,18 @@ const DownloadQueue: React.FC = () => {
     setStepsModalVisible(true);
   };
 
+  // 清除所有任务
+  const handleClearAllTasks = async (source?: TaskSource) => {
+    try {
+      const count = await clearAllAutoSaveTasks(source);
+      console.log(`已清除 ${count} 个任务${source ? ` (来源: ${source})` : ''}`);
+      // 触发刷新
+      setRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('清除所有任务失败:', error);
+    }
+  };
+
   return (
     <>
       <Card
@@ -425,6 +444,30 @@ const DownloadQueue: React.FC = () => {
             <Statistic title="已完成" value={completedTasks.length} />
             <Statistic title="失败" value={failedTasks.length} />
             <Statistic title="被过滤" value={filteredTasks.length} />
+            
+            {(waitingTasks.length > 0 || savingTasks.length > 0) && (
+              <Popconfirm
+                title="确定要清除所有待处理任务吗？"
+                description="此操作将取消所有等待中和保存中的任务，无法撤销。"
+                onConfirm={() => handleClearAllTasks()}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button danger>清除所有待处理任务</Button>
+              </Popconfirm>
+            )}
+            
+            {waitingTasks.filter(t => t.source === TaskSource.AUTO_RULE).length > 0 && (
+              <Popconfirm
+                title="确定要清除自动规则任务吗？"
+                description="此操作将只取消来源为自动规则的待处理任务，无法撤销。"
+                onConfirm={() => handleClearAllTasks(TaskSource.AUTO_RULE)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button danger>清除自动规则任务</Button>
+              </Popconfirm>
+            )}
           </Space>
         </div>
 
@@ -658,6 +701,25 @@ const DownloadQueue: React.FC = () => {
             </div>
           </TabPane>
         </Tabs>
+
+        {/* 清除所有任务按钮 */}
+        <div className="mt-4">
+          <Popconfirm
+            title="确定要清除所有历史记录和任务吗？"
+            onConfirm={async () => {
+              // 清除所有任务的逻辑
+              await Promise.all(tasks.map(task => clearAutoSaveTask(task.tabId)));
+              // 触发刷新
+              setRefreshKey(prev => prev + 1);
+            }}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="primary" danger>
+              清除所有任务
+            </Button>
+          </Popconfirm>
+        </div>
       </Card>
       
       {/* 步骤详情模态框 */}
