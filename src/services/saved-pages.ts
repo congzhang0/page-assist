@@ -3,19 +3,16 @@
  * 提供保存当前页面到数据库的功能
  */
 
+// 注意：截图功能已被禁用，但保留相关导入以避免破坏依赖关系
 import { getDataFromCurrentTab, getDataFromSpecificTab } from "@/libs/get-html";
 import { getScreenshotFromCurrentTab, getScreenshotFromSpecificTab } from "@/libs/get-screenshot";
-import { savedPagesDB, type SavedPage, type SavePageParams } from "@/db/savedPages";
+import { savedPagesDB } from "@/db/savedpages";
+import type { SavedPage, SavePageParams } from "@/db/savedpages";
 import { generateSummary } from "@/services/llm-service";
 import { browser } from "wxt/browser";
-
-/**
- * 保存当前页面到数据库
- * @param params 保存参数
- * @returns 保存的页面信息
- */
+import { TaskSource } from "./auto-save";
+import { isUrlAlreadySaved } from "./auto-save"; // 导入从auto-save.ts的函数
 import logger from '@/utils/logger';
-
 import { setBadgeText, setBadgeBackgroundColor, setBadgeTextColor, setTitle } from "@/utils/action";
 import statusIndicator from "@/utils/status-indicator";
 
@@ -77,6 +74,8 @@ export const saveCurrentPage = async (params?: {
   notes?: string;
   title?: string; // 可选的标题，用于自动保存时传递
   tabId?: number; // 可选的标签页ID，用于自动保存时指定标签页
+  source?: TaskSource; // 保存来源
+  sourceInfo?: string; // 来源详细信息
 }): Promise<SavedPage> => {
   logger.info('开始保存当前页面', params);
 
@@ -114,77 +113,45 @@ export const saveCurrentPage = async (params?: {
     const { url, title, content, type, pdf, favicon } = pageDataResult;
     logger.info('成功获取页面内容', { url, title, contentLength: content?.length, type });
 
-    // 获取页面截图
-     logger.debug('正在获取页面截图', params?.tabId ? { tabId: params.tabId } : {});
-     updateSaveStatus("2/3", "#3498db", "第2步", "正在获取页面截图..."); // 第二阶段：获取截图
-
-    let screenshotResult;
-    if (params?.tabId) {
-      // 如果提供了 tabId，使用 getScreenshotFromSpecificTab
-      screenshotResult = await getScreenshotFromSpecificTab(params.tabId).catch(err => {
-        // 检查是否是配额限制错误
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
-
-        if (isQuotaError) {
-          logger.warn('截图请求超过配额限制，已加入队列处理', { tabId: params.tabId, error: errorMessage });
-          updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
-
-          // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
-          return {
-            success: false,
-            screenshot: undefined,
-            error: errorMessage,
-            isQuotaError: true
-          };
-        } else {
-          logger.error('获取页面截图失败', { tabId: params.tabId, error: err });
-          // 其他截图失败不阻止保存过程，继续执行
-          return { success: false, screenshot: undefined, error: errorMessage };
-        }
-      });
-    } else {
-      // 否则使用原来的 getScreenshotFromCurrentTab
-      screenshotResult = await getScreenshotFromCurrentTab().catch(err => {
-        // 检查是否是配额限制错误
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const isQuotaError = errorMessage.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND');
-
-        if (isQuotaError) {
-          logger.warn('截图请求超过配额限制，已加入队列处理', { error: errorMessage });
-          updateSaveStatus("2/3", "#f39c12", "第2步", "截图请求已加入队列，正在等待处理..."); // 黄色表示等待中
-
-          // 对于配额错误，我们不会立即失败，而是返回一个特殊标记
-          return {
-            success: false,
-            screenshot: undefined,
-            error: errorMessage,
-            isQuotaError: true
-          };
-        } else {
-          logger.error('获取页面截图失败', err);
-          // 其他截图失败不阻止保存过程，继续执行
-          return { success: false, screenshot: undefined, error: errorMessage };
-        }
-      });
-    }
-
-    const { success, screenshot, error: screenshotError, isQuotaError } = screenshotResult;
-
-    if (!success) {
-      if (isQuotaError) {
-        logger.warn('截图请求已加入队列，但当前保存操作将继续进行', { error: screenshotError });
-        // 对于配额错误，我们显示一个友好的消息
-        statusIndicator.showNotification(
-          "截图请求已加入队列",
-          "由于浏览器限制，截图请求已加入队列。页面将保存，但可能不包含截图。"
-        );
-      } else {
-        logger.warn('获取页面截图失败，将继续保存页面', screenshotError);
+    // 检查URL是否已经保存过
+    const isExist = await isUrlAlreadySaved(url);
+    if (isExist) {
+      logger.info('URL已经存在，跳过保存:', url);
+      updateSaveStatus("✓", "#2ecc71", "完成", "页面已存在，跳过重复保存！");
+      
+      // 显示成功通知
+      statusIndicator.showNotification(
+        "页面已存在", 
+        "该URL已经保存过，跳过重复保存",
+        statusIndicator.StatusType.INFO
+      );
+      
+      // 获取现有页面并返回
+      const existingPages = await getAllSavedPages({ searchText: url });
+      const existingPage = existingPages.find(page => page.url === url);
+      if (existingPage) {
+        return existingPage;
       }
-    } else {
-      logger.info('成功获取页面截图', { screenshotLength: screenshot?.length });
+      
+      // 如果没找到精确匹配的页面(极少数情况)，继续保存流程
+      logger.warn('URL已存在但未找到精确匹配的页面，将继续保存流程:', url);
     }
+
+    // 获取页面截图
+     logger.debug('跳过获取页面截图功能');
+     updateSaveStatus("2/3", "#3498db", "第2步", "跳过截图步骤..."); // 第二阶段：跳过截图
+    
+    // 创建一个空的截图结果，不进行实际的截图操作
+    const screenshotResult = {
+      success: false,
+      screenshot: undefined,
+      error: "截图功能已禁用",
+      isQuotaError: false
+    };
+    
+    const { success, screenshot, error: screenshotError } = screenshotResult;
+    
+    logger.info('截图功能已禁用，跳过截图步骤');
 
     // 使用LLM生成摘要、关键词和评分
     logger.debug('正在使用LLM生成摘要和关键词');
@@ -221,45 +188,56 @@ export const saveCurrentPage = async (params?: {
       logger.warn('生成摘要和关键词失败，将继续保存页面', error);
     }
 
-    // 合并用户提供的标签和自动生成的标签
-    const mergedTags = [...new Set([...(params?.tags || []), ...autoTags])];
+    // 保存页面到数据库
+    logger.debug('正在保存页面到数据库');
+    updateSaveStatus("3/3", "#3498db", "第3步", "正在保存页面到数据库..."); // 第三阶段：保存到数据库
 
-    // 准备保存参数
-    const saveParams: SavePageParams = {
-      title,
+    // 如果提供了自定义标题，使用自定义标题
+    const finalTitle = params?.title || title;
+
+    // 合并自动生成的标签和用户提供的标签
+    let finalTags = autoTags || [];
+    if (params?.tags && params.tags.length > 0) {
+      // 添加用户标签并去重
+      finalTags = [...new Set([...finalTags, ...params.tags])];
+    }
+
+    // Create combined notes with source info
+    const combinedNotes = params?.notes || '';
+    const sourceNotes = params?.sourceInfo ? `\n\nSource: ${params?.sourceInfo}` : '';
+
+    // 保存页面
+    const savedPage = await savedPagesDB.savePage({
       url,
+      title: finalTitle,
       content,
-      html: content, // 保存所有类型页面的原始内容
-      type,
-      tags: mergedTags,
-      notes: params?.notes || '',
+      html: pdf || '', // Ensure html is provided
+      type: type as "article" | "image" | "video" | "other", // Cast to the correct type
+      tags: finalTags,
+      notes: combinedNotes + sourceNotes,
       summary,
       rating,
-      favicon,
-      screenshot: success ? screenshot : undefined
-    };
-
-    // 保存到数据库
-     logger.debug('正在保存页面到数据库', { url, title });
-     updateSaveStatus("3/3", "#3498db", "第3步", "正在保存页面到数据库..."); // 第三阶段：保存到数据库
-
-    const savedPage = await savedPagesDB.savePage(saveParams).catch(err => {
-      logger.error('保存页面到数据库失败', err);
-       updateSaveStatus("✗", "#e74c3c", "错误", `保存页面到数据库失败: ${err.message || '未知错误'}`);
-       throw new Error(`保存页面到数据库失败: ${err.message || '未知错误'}`);
+      favicon
     });
 
-    logger.info('页面保存成功', { id: savedPage.id, title: savedPage.title, url: savedPage.url });
-     updateSaveStatus("✓", "#2ecc71", "完成", "页面保存成功！"); // 绿色表示成功
+    // 更新状态为保存成功
+    logger.info('页面保存成功', { id: savedPage.id, url, title: finalTitle });
+    updateSaveStatus("✓", "#2ecc71", "完成", "页面保存成功！"); // 绿色表示成功
+
+    // 显示成功通知
+    statusIndicator.showSaveSuccess(finalTitle);
+
     return savedPage;
   } catch (error) {
-    logger.error('保存页面过程中发生错误', error);
-    // 重新抛出错误，但保留原始错误信息
-    if (error instanceof Error) {
-      throw error;
-    } else {
-      throw new Error(`保存页面失败: ${error}`);
-    }
+    // 更新状态为保存失败
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('保存页面失败', { error: errorMessage });
+    updateSaveStatus("✗", "#e74c3c", "错误", `保存页面失败: ${errorMessage}`); // 红色表示失败
+
+    // 显示错误通知
+    statusIndicator.showSaveError(errorMessage);
+
+    throw error;
   }
 };
 
@@ -358,13 +336,15 @@ export const getAllTags = async (): Promise<string[]> => {
  */
 export const exportSavedPages = async (ids?: string[]): Promise<SavedPage[]> => {
   try {
-    const allPages = await savedPagesDB.getAllPages();
-
+    const pages = await getAllSavedPages();
+    
+    // If no IDs provided, export all pages
     if (!ids || ids.length === 0) {
-      return allPages;
+      return pages;
     }
-
-    return allPages.filter(page => ids.includes(page.id));
+    
+    // Filter pages by IDs
+    return pages.filter(page => ids.includes(page.id));
   } catch (error) {
     console.error('导出页面失败:', error);
     throw new Error('导出页面失败');
@@ -391,8 +371,7 @@ export const importSavedPages = async (pages: SavedPage[]): Promise<number> => {
         notes: page.notes,
         summary: page.summary,
         rating: page.rating,
-        favicon: page.favicon,
-        screenshot: page.screenshot
+        favicon: page.favicon
       });
 
       importedCount++;

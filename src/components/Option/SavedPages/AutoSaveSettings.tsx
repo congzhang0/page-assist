@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Switch, Input, Button, List, Tag, Tooltip, InputNumber, Form, Space, Divider, Typography, message, Modal, Alert } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, ClockCircleOutlined, GlobalOutlined, SaveOutlined, AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, ClockCircleOutlined, GlobalOutlined, SaveOutlined, AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExperimentOutlined, SyncOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { Storage } from '@plasmohq/storage';
 import { saveAllOpenTabs, isUrlMatchPattern, shouldAutoSaveUrl } from '@/services/auto-save';
@@ -14,6 +14,9 @@ export interface AutoSaveSettings {
   saveDelay: number; // 单位：分钟
   maxPages: number; // 最大保存页面数量
   paused: boolean; // 是否暂停自动保存（临时停止但保留设置）
+  scanInterval: number; // 扫描间隔时间（分钟）
+  enablePeriodicScan: boolean; // 是否启用定期扫描
+  enableDelayedSave: boolean; // 是否启用延迟保存
 }
 
 // 网站规则类型定义
@@ -37,9 +40,12 @@ const DEFAULT_SETTINGS: AutoSaveSettings = {
   websites: [
     { id: generateID(), pattern: '*', enabled: true }
   ],
-  saveDelay: 1,
+  saveDelay: 1, // 默认延迟1分钟
   maxPages: 100, // 默认最大保存100个页面
-  paused: false // 默认不暂停
+  paused: false, // 默认不暂停
+  scanInterval: 30, // 默认扫描间隔30分钟
+  enablePeriodicScan: true, // 默认启用定期扫描
+  enableDelayedSave: true, // 默认启用延迟保存
 };
 
 // 存储键名
@@ -127,6 +133,20 @@ const AutoSaveSettings: React.FC = () => {
   const handleMaxPagesChange = (value: number | null) => {
     if (value !== null) {
       const newSettings = { ...settings, maxPages: value };
+      saveSettings(newSettings);
+    }
+  };
+
+  // 切换定期扫描功能
+  const handleTogglePeriodicScan = (checked: boolean) => {
+    const newSettings = { ...settings, enablePeriodicScan: checked };
+    saveSettings(newSettings);
+  };
+
+  // 更改扫描间隔时间
+  const handleScanIntervalChange = (value: number | null) => {
+    if (value !== null) {
+      const newSettings = { ...settings, scanInterval: value };
       saveSettings(newSettings);
     }
   };
@@ -292,6 +312,33 @@ const AutoSaveSettings: React.FC = () => {
     }
   };
 
+  // 手动触发扫描
+  const [scanning, setScanning] = useState(false);
+  const [scanStats, setScanStats] = useState<{
+    scanned: number;
+    saved: number;
+    filtered: number;
+  } | null>(null);
+  
+  const handleManualScan = async () => {
+    setScanning(true);
+    try {
+      // 导入手动扫描函数
+      const { manualScanAllTabs } = await import('@/services/auto-save');
+      
+      // 调用手动扫描
+      const stats = await manualScanAllTabs();
+      setScanStats(stats);
+      
+      message.success(`扫描完成！已扫描 ${stats.scanned} 个页面，设置了 ${stats.saved} 个保存任务，过滤了 ${stats.filtered} 个页面`);
+    } catch (error) {
+      console.error('手动扫描失败:', error);
+      message.error('扫描失败，请查看控制台获取详细信息');
+    } finally {
+      setScanning(false);
+    }
+  };
+
   return (
     <Card title={<Title level={4}>自动保存设置</Title>} className="mb-4">
       <Form layout="vertical">
@@ -330,21 +377,80 @@ const AutoSaveSettings: React.FC = () => {
             </div>
           </Form.Item>
         )}
+        
+        <Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            message="自动保存模式说明"
+            description={
+              <div>
+                <p><strong>定期扫描：</strong>系统会按照设定的时间间隔主动扫描您当前打开的所有标签页，根据规则自动保存符合条件的页面。适用于您希望定期捕获网页内容的场景。</p>
+                <p><strong>延迟保存：</strong>当您浏览新网页且页面加载完成后，系统会等待指定的延迟时间再自动保存页面。适用于您想在浏览后自动保存的场景。</p>
+                <p><strong>您可以选择启用其中一种或同时启用两种模式</strong>，以获得最佳的自动保存体验。</p>
+              </div>
+            }
+          />
+        </Form.Item>
 
         <Form.Item
-          label="保存延迟时间"
-          tooltip="网页加载完成后，等待多少分钟后自动保存"
+          label="启用定期扫描"
+          tooltip="启用后，系统将根据设置的时间间隔自动扫描并保存网页"
         >
-          <InputNumber
-            min={0.5}
-            max={60}
-            step={0.5}
-            value={settings.saveDelay}
-            onChange={handleSaveDelayChange}
-            addonAfter="分钟"
+          <Switch
+            checked={settings.enablePeriodicScan}
+            onChange={handleTogglePeriodicScan}
             disabled={!settings.enabled}
           />
         </Form.Item>
+
+        {settings.enablePeriodicScan && (
+          <Form.Item
+            label="扫描间隔时间"
+            tooltip="定期扫描的时间间隔（分钟）"
+          >
+            <InputNumber
+              min={1}
+              max={1440}
+              step={1}
+              value={settings.scanInterval}
+              onChange={handleScanIntervalChange}
+              addonAfter="分钟"
+              disabled={!settings.enabled || !settings.enablePeriodicScan}
+            />
+          </Form.Item>
+        )}
+
+        <Form.Item
+          label="启用延迟保存"
+          tooltip="启用后，系统将根据设置的延迟时间自动保存网页"
+        >
+          <Switch
+            checked={settings.enableDelayedSave}
+            onChange={(checked) => {
+              const newSettings = { ...settings, enableDelayedSave: checked };
+              saveSettings(newSettings);
+            }}
+            disabled={!settings.enabled}
+          />
+        </Form.Item>
+
+        {settings.enableDelayedSave && (
+          <Form.Item
+            label="保存延迟时间"
+            tooltip="网页加载完成后，等待多少分钟后自动保存，设为0.1分钟表示几乎立即保存"
+          >
+            <InputNumber
+              min={0.1}
+              max={60}
+              step={0.5}
+              value={settings.saveDelay}
+              onChange={handleSaveDelayChange}
+              addonAfter="分钟"
+              disabled={!settings.enabled}
+            />
+          </Form.Item>
+        )}
 
         <Form.Item
           label="最大保存页面数量"
@@ -385,6 +491,45 @@ const AutoSaveSettings: React.FC = () => {
             </Text>
           </div>
         </Form.Item>
+        
+        <Form.Item
+          label="手动扫描所有标签页"
+          tooltip="扫描当前浏览器中所有已打开的标签页，根据规则自动保存符合条件的页面"
+        >
+          <Space direction="vertical">
+            <Button
+              type="default"
+              icon={<SyncOutlined spin={scanning} />}
+              onClick={handleManualScan}
+              loading={scanning}
+              disabled={!settings.enabled}
+            >
+              扫描所有标签页
+            </Button>
+            <div>
+              <Text type="secondary">
+                此操作将扫描当前浏览器中所有已打开的标签页，根据您设置的规则过滤并保存符合条件的页面
+              </Text>
+            </div>
+          </Space>
+        </Form.Item>
+        
+        {scanStats && (
+          <Form.Item>
+            <Alert
+              type="info"
+              showIcon
+              message="最近扫描结果"
+              description={
+                <Space direction="vertical">
+                  <Text>扫描了 {scanStats.scanned} 个页面</Text>
+                  <Text>设置了 {scanStats.saved} 个保存任务</Text>
+                  <Text>过滤了 {scanStats.filtered} 个页面</Text>
+                </Space>
+              }
+            />
+          </Form.Item>
+        )}
 
         <Divider orientation="left">网站规则</Divider>
 

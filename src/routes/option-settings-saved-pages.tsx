@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography, Tabs } from "antd";
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined, CloudSyncOutlined } from "@ant-design/icons";
+import { Button, Card, Input, List, Modal, Pagination, Space, Tag, Tooltip, Rate, message, Typography, Tabs, Dropdown, Menu } from "antd";
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, ImportOutlined, SearchOutlined, TagOutlined, StarOutlined, CodeOutlined, FileTextOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined, CloudSyncOutlined, CheckOutlined } from "@ant-design/icons";
 import { getAllSavedPages, getAllTags, deleteSavedPage, updateSavedPage, exportSavedPages, importSavedPages } from "@/services/saved-pages";
-import type { SavedPage } from "@/db/saved-pages";
+import type { SavedPage } from "@/db/savedpages";
 import { useNavigate } from "react-router-dom";
 import { SettingsLayout } from "@/components/Layouts/SettingsOptionLayout";
 import AutoSaveSettings from "@/components/Option/SavedPages/AutoSaveSettings";
 import DownloadQueue from "@/components/Option/SavedPages/DownloadQueue";
 import { SyncSettings } from "@/components/Sidepanel/Settings/SyncSettings";
+import { formatDate } from "@/utils/date-formatter";
 
 const PAGE_SIZE = 10;
 
@@ -36,6 +37,11 @@ const SavedPagesContent: React.FC = () => {
   const [htmlModalVisible, setHtmlModalVisible] = useState(false);
   const [summaryModalVisible, setSummaryModalVisible] = useState(false);
   const [currentViewPage, setCurrentViewPage] = useState<SavedPage | null>(null);
+  
+  // 添加自动刷新相关状态
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
+  const [refreshInterval, setRefreshInterval] = useState<number>(60); // 默认60秒
+  const [refreshIntervalId, setRefreshIntervalId] = useState<NodeJS.Timeout | null>(null);
 
   // 加载保存的页面
   const loadPages = async () => {
@@ -81,6 +87,65 @@ const SavedPagesContent: React.FC = () => {
   useEffect(() => {
     loadPages();
   }, [searchText, selectedTags, currentPage]);
+
+  // 加载保存的自动刷新设置
+  useEffect(() => {
+    const savedAutoRefresh = localStorage.getItem('savedPages_autoRefresh');
+    const savedInterval = localStorage.getItem('savedPages_refreshInterval');
+    
+    if (savedAutoRefresh) {
+      setAutoRefresh(savedAutoRefresh === 'true');
+    }
+    
+    if (savedInterval) {
+      setRefreshInterval(parseInt(savedInterval, 10));
+    }
+  }, []);
+  
+  // 自动刷新逻辑
+  useEffect(() => {
+    if (autoRefresh) {
+      // 清除现有的定时器
+      if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+      }
+      
+      // 创建新的定时器
+      const intervalId = setInterval(() => {
+        if (activeTab === '1') { // 只在已保存页面标签激活时自动刷新
+          loadPages();
+        }
+      }, refreshInterval * 1000);
+      
+      setRefreshIntervalId(intervalId);
+      
+      // 组件卸载时清除定时器
+      return () => {
+        clearInterval(intervalId);
+      };
+    } else if (refreshIntervalId) {
+      // 如果关闭了自动刷新，清除定时器
+      clearInterval(refreshIntervalId);
+      setRefreshIntervalId(null);
+    }
+  }, [autoRefresh, refreshInterval, activeTab]);
+  
+  // 切换自动刷新
+  const toggleAutoRefresh = (value: boolean) => {
+    setAutoRefresh(value);
+    localStorage.setItem('savedPages_autoRefresh', String(value));
+  };
+  
+  // 更改刷新间隔
+  const changeRefreshInterval = (value: number) => {
+    setRefreshInterval(value);
+    localStorage.setItem('savedPages_refreshInterval', String(value));
+    
+    // 如果已经开启了自动刷新，更新现有的定时器
+    if (autoRefresh) {
+      toggleAutoRefresh(true);
+    }
+  };
 
   // 处理搜索
   const handleSearch = (value: string) => {
@@ -276,15 +341,67 @@ const SavedPagesContent: React.FC = () => {
                 onSearch={handleSearch}
                 className="flex-1"
               />
-              <Tooltip title={t("savedPages.buttons.refresh", "刷新")}>
-                <Button
-                  icon={<ReloadOutlined />}
-                  className="ml-2"
-                  onClick={() => loadPages()}
+              <Space className="ml-2">
+                <Tooltip title={t("savedPages.buttons.refresh", "刷新")}>
+                  <Button
+                    icon={<ReloadOutlined />}
+                    onClick={() => loadPages()}
+                    loading={loading}
+                  >
+                    {t("savedPages.buttons.refresh", "刷新")}
+                  </Button>
+                </Tooltip>
+                <Dropdown
+                  overlay={
+                    <Menu>
+                      <Menu.Item key="manual" onClick={() => toggleAutoRefresh(false)}>
+                        <Space>
+                          {!autoRefresh && <CheckOutlined />}
+                          <span className={!autoRefresh ? 'font-bold' : ''}>手动刷新</span>
+                        </Space>
+                      </Menu.Item>
+                      <Menu.Divider />
+                      <Menu.ItemGroup title="自动刷新间隔">
+                        <Menu.Item 
+                          key="30" 
+                          onClick={() => { toggleAutoRefresh(true); changeRefreshInterval(30); }}
+                        >
+                          <Space>
+                            {autoRefresh && refreshInterval === 30 && <CheckOutlined />}
+                            <span className={autoRefresh && refreshInterval === 30 ? 'font-bold' : ''}>30秒</span>
+                          </Space>
+                        </Menu.Item>
+                        <Menu.Item 
+                          key="60" 
+                          onClick={() => { toggleAutoRefresh(true); changeRefreshInterval(60); }}
+                        >
+                          <Space>
+                            {autoRefresh && refreshInterval === 60 && <CheckOutlined />}
+                            <span className={autoRefresh && refreshInterval === 60 ? 'font-bold' : ''}>1分钟</span>
+                          </Space>
+                        </Menu.Item>
+                        <Menu.Item 
+                          key="300" 
+                          onClick={() => { toggleAutoRefresh(true); changeRefreshInterval(300); }}
+                        >
+                          <Space>
+                            {autoRefresh && refreshInterval === 300 && <CheckOutlined />}
+                            <span className={autoRefresh && refreshInterval === 300 ? 'font-bold' : ''}>5分钟</span>
+                          </Space>
+                        </Menu.Item>
+                      </Menu.ItemGroup>
+                    </Menu>
+                  }
+                  trigger={['click']}
                 >
-                  {t("savedPages.buttons.refresh", "刷新")}
-                </Button>
-              </Tooltip>
+                  <Button 
+                    icon={<SettingOutlined />} 
+                    type={autoRefresh ? 'primary' : 'default'}
+                  >
+                    {autoRefresh ? `${refreshInterval}秒自动刷新` : '刷新设置'}
+                  </Button>
+                </Dropdown>
+              </Space>
             </div>
 
             <div className="mt-2">
@@ -353,7 +470,9 @@ const SavedPagesContent: React.FC = () => {
                       </div>
                       {page.notes && <div className="text-gray-700">{page.notes}</div>}
                       <div className="text-gray-400 text-xs mt-1">
-                        {t("savedPages.savedAt", "保存于 {{date}}", { date: new Date(page.createdAt).toLocaleString() })}
+                        {t("savedPages.savedAt", "保存于 {{date}}", { 
+                          date: formatDate(page.createdAt, 'YYYY-MM-DD HH:mm:ss') 
+                        })}
                       </div>
                     </div>
                   }
