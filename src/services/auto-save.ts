@@ -22,6 +22,8 @@ export interface AutoSaveSettings {
   saveDelay: number; // 单位：分钟
   maxPages: number; // 最大保存页面数量
   paused: boolean; // 是否暂停自动保存（临时停止但保留设置）
+  scanInterval: number; // 定期扫描间隔（单位：分钟）
+  enablePeriodicScan: boolean; // 是否启用定期扫描
 }
 
 // 保存任务来源枚举
@@ -97,7 +99,11 @@ const storage = new Storage({ area: 'local' });
 // 心跳检查
 const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5分钟
 let lastHeartbeat = Date.now();
-let heartbeatIntervalId: number;
+let heartbeatIntervalId: ReturnType<typeof setInterval> | undefined;
+
+// 定期扫描
+let scanIntervalId: ReturnType<typeof setInterval> | null = null;
+let lastScanTime = Date.now();
 
 /**
  * 检查URL是否匹配规则
@@ -750,6 +756,19 @@ export const setupAutoSaveTask = async (
     // 如果已经有同一个标签页的任务，先清除
     await clearAutoSaveTask(tabId);
 
+    // 如果延迟时间设置为很小（小于0.5分钟），直接保存而不设置定时器
+    if (delayMinutes < 0.5) {
+      logger.info(`延迟时间设置过短（${delayMinutes}分钟），直接进行保存`);
+      try {
+        // 直接保存页面
+        await autoSavePage(tabId);
+        return;
+      } catch (error) {
+        logger.error(`直接保存页面失败:`, error);
+        return;
+      }
+    }
+
     // 设置新的保存任务
     const timeoutId = setTimeout(async () => {
       try {
@@ -1280,6 +1299,11 @@ export const initAutoSave = (): void => {
 
   // 更新状态指示器
   updateAutoSaveStatus();
+  
+  // 启动定期扫描
+  storage.get<AutoSaveSettings>(STORAGE_KEY).then(settings => {
+    startPeriodicScan(settings);
+  });
 
   // 监听标签页更新事件
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -1310,11 +1334,25 @@ export const initAutoSave = (): void => {
         oldEnabled: oldSettings?.enabled,
         oldPaused: oldSettings?.paused,
         newEnabled: newSettings?.enabled,
-        newPaused: newSettings?.paused
+        newPaused: newSettings?.paused,
+        oldScanInterval: oldSettings?.scanInterval,
+        newScanInterval: newSettings?.scanInterval,
+        oldEnablePeriodicScan: oldSettings?.enablePeriodicScan,
+        newEnablePeriodicScan: newSettings?.enablePeriodicScan
       });
 
       // 更新状态指示器
       updateAutoSaveStatus();
+
+      // 处理定期扫描设置变更
+      const scanSettingsChanged = 
+        oldSettings?.enablePeriodicScan !== newSettings?.enablePeriodicScan ||
+        oldSettings?.scanInterval !== newSettings?.scanInterval;
+        
+      if (scanSettingsChanged) {
+        logger.info('定期扫描设置已变更，重新配置定期扫描');
+        startPeriodicScan(newSettings);
+      }
 
       // 如果设置从禁用变为启用，且未暂停，为所有打开的标签页设置自动保存任务
       if (newSettings?.enabled && !newSettings.paused &&
@@ -1337,6 +1375,9 @@ export const initAutoSave = (): void => {
         for (const task of Array.from(saveTasks.values())) {
           await clearAutoSaveTask(task.tabId);
         }
+        
+        // 停止定期扫描
+        stopPeriodicScan();
 
         if (newSettings?.paused) {
           logger.info('自动保存功能已暂停，所有保存任务已清除');
@@ -1446,4 +1487,209 @@ export const manualSaveCurrentPage = async (tabId: number, sourceInfo?: string):
     
     throw error;
   }
+};
+
+/**
+ * 启动定期扫描
+ * @param settings 自动保存设置
+ */
+const startPeriodicScan = async (settings?: AutoSaveSettings): Promise<void> => {
+  // 先停止当前的扫描定时器
+  stopPeriodicScan();
+  
+  // 如果未提供设置，从存储中获取
+  if (!settings) {
+    settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+  }
+  
+  // 如果未启用定期扫描或自动保存功能处于暂停状态，返回
+  if (!settings?.enablePeriodicScan || !settings?.enabled || settings?.paused) {
+    logger.debug('定期扫描未启用或自动保存功能已暂停，不启动定期扫描');
+    return;
+  }
+  
+  // 获取扫描间隔（默认30分钟）
+  const intervalMinutes = settings.scanInterval || 30;
+  const intervalMs = intervalMinutes * 60 * 1000;
+  
+  logger.info(`启动定期扫描，间隔: ${intervalMinutes} 分钟`);
+  
+  // 立即执行一次初始扫描
+  try {
+    logger.info('执行初始扫描...');
+    lastScanTime = Date.now();
+    await scanAllTabs();
+  } catch (error) {
+    logger.error('初始扫描失败:', error);
+  }
+  
+  // 设置定期扫描定时器
+  scanIntervalId = setInterval(async () => {
+    if (await shouldRunScan()) {
+      logger.info(`定期扫描触发，开始扫描所有打开的标签页`);
+      
+      // 记录扫描时间
+      lastScanTime = Date.now();
+      
+      // 扫描所有标签页
+      await scanAllTabs();
+    }
+  }, Math.max(intervalMs, 60000)); // 最小间隔1分钟
+};
+
+/**
+ * 停止定期扫描
+ */
+const stopPeriodicScan = (): void => {
+  if (scanIntervalId) {
+    clearInterval(scanIntervalId);
+    scanIntervalId = null;
+    logger.debug('已停止定期扫描');
+  }
+};
+
+/**
+ * 判断是否应该执行扫描
+ * 避免在短时间内重复扫描
+ */
+const shouldRunScan = async (): Promise<boolean> => {
+  // 获取设置
+  const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+  
+  // 如果功能被禁用或暂停，不执行扫描
+  if (!settings?.enabled || settings?.paused || !settings?.enablePeriodicScan) {
+    return false;
+  }
+  
+  // 计算距离上次扫描的时间
+  const now = Date.now();
+  const timeSinceLastScan = now - lastScanTime;
+  
+  // 如果距离上次扫描不足5分钟，不执行扫描（避免频繁扫描）
+  const minInterval = 5 * 60 * 1000; // 最小间隔5分钟
+  if (timeSinceLastScan < minInterval) {
+    logger.debug(`距离上次扫描时间不足5分钟，跳过本次扫描`, {
+      timeSinceLastScan: Math.floor(timeSinceLastScan / 1000) + '秒'
+    });
+    return false;
+  }
+  
+  return true;
+};
+
+/**
+ * 扫描所有打开的标签页
+ * 根据规则过滤并保存符合条件的页面
+ */
+const scanAllTabs = async (): Promise<{
+  scanned: number;
+  saved: number;
+  filtered: number;
+}> => {
+  try {
+    // 获取所有标签页
+    const tabs = await browser.tabs.query({});
+    let scannedCount = 0;
+    let savedCount = 0;
+    let filteredCount = 0;
+    
+    logger.info(`开始扫描所有标签页，共 ${tabs.length} 个标签页`);
+    
+    // 获取自动保存设置
+    const settings = await storage.get<AutoSaveSettings>(STORAGE_KEY);
+    if (!settings || !settings.enabled || settings.paused) {
+      logger.debug('自动保存功能未启用或已暂停，跳过扫描');
+      return { scanned: 0, saved: 0, filtered: 0 };
+    }
+    
+    // 并行处理所有标签页
+    await Promise.all(tabs.map(async (tab) => {
+      if (!tab.id || !tab.url) {
+        filteredCount++;
+        return;
+      }
+      
+      try {
+        scannedCount++;
+        
+        // 检查是否是浏览器内部页面
+        if (tab.url.startsWith('chrome://') || 
+            tab.url.startsWith('chrome-extension://') || 
+            tab.url.startsWith('edge://') || 
+            tab.url.startsWith('about:') ||
+            tab.url.startsWith('moz-extension://') ||
+            tab.url.startsWith('firefox:') ||
+            tab.url.startsWith('brave:')) {
+          logger.debug(`跳过浏览器内部页面: ${tab.url}`);
+          filteredCount++;
+          return;
+        }
+        
+        // 检查URL是否应该自动保存
+        const { shouldSave, matchedRule } = await shouldAutoSaveUrlWithRule(tab.url, settings);
+        if (!shouldSave) {
+          logger.debug(`URL ${tab.url} 不符合自动保存规则，跳过`);
+          filteredCount++;
+          return;
+        }
+        
+        // 检查URL是否已经保存过
+        const isAlreadySaved = await isUrlAlreadySaved(tab.url);
+        if (isAlreadySaved) {
+          logger.debug(`URL ${tab.url} 已经保存过，跳过`);
+          filteredCount++;
+          return;
+        }
+        
+        // 检查是否已经达到最大保存页面数量
+        const isLimitReached = await isMaxPageLimitReached(settings);
+        if (isLimitReached) {
+          logger.debug(`已达到最大保存页面数量限制 (${settings.maxPages})，停止扫描`);
+          return;
+        }
+        
+        // 设置保存任务
+        logger.info(`设置保存任务: ${tab.url}`);
+        await setupAutoSaveTask(
+          tab.id,
+          undefined,
+          TaskSource.AUTO_RULE,
+          `定期扫描自动保存 - 规则: ${matchedRule}`
+        );
+        savedCount++;
+      } catch (error) {
+        logger.error(`处理标签页 ${tab.id} 时出错:`, error);
+        filteredCount++;
+      }
+    }));
+    
+    logger.info(`定期扫描完成: 扫描 ${scannedCount} 个页面，设置了 ${savedCount} 个保存任务，过滤了 ${filteredCount} 个页面`);
+    
+    return {
+      scanned: scannedCount,
+      saved: savedCount,
+      filtered: filteredCount
+    };
+  } catch (error) {
+    logger.error('扫描所有标签页失败:', error);
+    return { scanned: 0, saved: 0, filtered: 0 };
+  }
+};
+
+/**
+ * 手动触发扫描
+ * 返回扫描结果统计
+ */
+export const manualScanAllTabs = async (): Promise<{
+  scanned: number;
+  saved: number;
+  filtered: number;
+}> => {
+  logger.info('手动触发扫描所有标签页');
+  
+  // 记录扫描时间
+  lastScanTime = Date.now();
+  
+  // 执行扫描
+  return await scanAllTabs();
 };
